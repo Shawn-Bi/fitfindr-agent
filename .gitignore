@@ -27,3 +27,8 @@ out/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Private local notes — never commit
+KICKOFF_PROMPT.md
+*.docx
+~$*
