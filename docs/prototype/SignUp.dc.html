@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your account</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&amp;family=DM+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0369A1}a:hover{color:#075985}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F2F8FC; color: #1B1E1C; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <header style="display: flex; align-items: center; gap: 12px; padding: 14px 12px">
+    <a href="Main.dc.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B1E1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <div style="display: flex; align-items: center; gap: 6px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px"><svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-8 32 32)"><path d="M3 32 L17 11 H56 a6 6 0 0 1 6 6 V47 a6 6 0 0 1 -6 6 H17 Z" fill="#0369A1"></path><circle cx="14" cy="32" r="3.6" fill="#FFFFFF"></circle><path d="M26 21 V43 M26 21 H36 M26 31.5 H34" stroke="#FFFFFF" stroke-width="4.6" stroke-linecap="round" fill="none"></path><path d="M42 21 V43 M42 21 H52 M42 31.5 H50" stroke="#7DD3FC" stroke-width="4.6" stroke-linecap="round" fill="none"></path></g></svg><span>Fit<span style="color: #0284C7">Findr</span></span></div>
+  </header>
+
+  <div style="padding: 8px 20px 0; display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 13px; color: #4F5551; font-weight: 500">Step 1 of 2</div>
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; letter-spacing: -0.5px">Create your account</h1>
+    <p style="margin: 0; font-size: 15px; color: #4F5551">Just an email and a password. Everything else is optional.</p>
+  </div>
+
+  <form style="padding: 22px 20px 0; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="email" style="font-size: 14px; font-weight: 700">Email</label>
+      <input id="email" type="email" autocomplete="email" placeholder="you@example.com" style="height: 50px; box-sizing: border-box; border: 1.5px solid #C9CDC6; border-radius: 12px; padding: 0 14px; font-size: 16px; font-family: 'DM Sans', sans-serif; background: #FFFFFF">
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="pw" style="font-size: 14px; font-weight: 700">Password</label>
+      <div style="display: flex; align-items: center; height: 50px; box-sizing: border-box; border: 1.5px solid #C9CDC6; border-radius: 12px; background: #FFFFFF; padding-left: 14px">
+        <input id="pw" type="password" autocomplete="new-password" placeholder="At least 12 characters" style="flex: 1; border: 0; outline: none; font-size: 16px; font-family: 'DM Sans', sans-serif; background: transparent; min-width: 0">
+        <button type="button" style="height: 44px; padding: 0 14px; border: 0; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700; color: #0369A1">Show</button>
+      </div>
+      <div style="font-size: 12px; color: #4F5551">Use 12 or more characters. Password managers welcome.</div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: flex-start; background: #FFFFFF; border-radius: 12px; padding: 12px">
+      <input id="terms" type="checkbox" style="width: 22px; height: 22px; margin: 0; accent-color: #0369A1; flex-shrink: 0">
+      <label for="terms" style="font-size: 14px; line-height: 1.4">I agree to the <a href="#terms">Terms of Service</a> and the <a href="#privacy">Privacy Policy</a>. <span style="color: #4F5551">(required)</span></label>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: flex-start; padding: 0 12px">
+      <input id="news" type="checkbox" style="width: 22px; height: 22px; margin: 0; accent-color: #0369A1; flex-shrink: 0">
+      <label for="news" style="font-size: 14px; line-height: 1.4; color: #4F5551">Email me new matches for my closet. Optional, off by default.</label>
+    </div>
+
+    <a href="Profile.dc.html" style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 14px; background: #0369A1; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px; margin-top: 4px">Create account</a>
+    <div style="text-align: center; font-size: 14px; color: #4F5551">Already have an account? <a href="Home.dc.html" style="font-weight: 700">Log in</a></div>
+  </form>
+
+  <p style="margin: auto 20px 20px; font-size: 12px; line-height: 1.5; color: #4F5551">We'll send a link to verify your email. Purchases happen on the original store's site; FitFindr never asks for payment details.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FitFindr landing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&amp;family=DM+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#0369A1}a:hover{color:#075985}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F2F8FC; color: #1B1E1C; font-family: 'DM Sans', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px">
+    <div style="display: flex; align-items: center; gap: 6px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.5px"><svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-8 32 32)"><path d="M3 32 L17 11 H56 a6 6 0 0 1 6 6 V47 a6 6 0 0 1 -6 6 H17 Z" fill="#0369A1"></path><circle cx="14" cy="32" r="3.6" fill="#FFFFFF"></circle><path d="M26 21 V43 M26 21 H36 M26 31.5 H34" stroke="#FFFFFF" stroke-width="4.6" stroke-linecap="round" fill="none"></path><path d="M42 21 V43 M42 21 H52 M42 31.5 H50" stroke="#7DD3FC" stroke-width="4.6" stroke-linecap="round" fill="none"></path></g></svg><span>Fit<span style="color: #0284C7">Findr</span></span></div>
+    <nav style="display: flex; gap: 16px; align-items: center; font-size: 14px">
+      <a href="#how" style="color: #1B1E1C; text-decoration: none">How it works</a>
+      <a href="SignUp.dc.html" style="color: #1B1E1C; text-decoration: none; font-weight: 700">Log in</a>
+    </nav>
+  </header>
+
+  <section style="padding: 20px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <span style="align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: #DCEFFB; color: #0369A1; padding: 6px 10px; border-radius: 999px">Secondhand, styled for you</span>
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 38px; line-height: 1.05; letter-spacing: -1px; font-weight: 700">Find pieces that fit your wardrobe, not just your search.</h1>
+    <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4F5551">Secondhand finds from supported stores, matched to your style, size and budget.</p>
+  </section>
+
+  <form style="margin: 22px 20px 0; display: flex; flex-direction: column; gap: 10px">
+    <label for="trysearch" style="font-size: 13px; font-weight: 700">Try a search</label>
+    <div style="display: flex; gap: 8px; align-items: center; background: #FFFFFF; border: 1.5px solid #1B1E1C; border-radius: 14px; padding: 6px 6px 6px 14px">
+      <input id="trysearch" type="text" placeholder="vintage graphic tee under $30" style="flex: 1; border: 0; outline: none; font-size: 15px; font-family: 'DM Sans', sans-serif; background: transparent; min-width: 0">
+      <a href="Results.dc.html" aria-label="Search" style="width: 44px; height: 44px; border-radius: 10px; background: #1B1E1C; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      </a>
+    </div>
+    <a href="SignUp.dc.html" style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 14px; background: #0369A1; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px">Get started — it's free</a>
+  </form>
+
+  <section id="how" style="margin: 26px 20px 0; display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px">How it works</h2>
+    <div style="display: flex; gap: 12px; align-items: center; background: #FFFFFF; border-radius: 14px; padding: 12px 14px">
+      <span style="width: 32px; height: 32px; border-radius: 999px; background: #0369A1; color: #FFFFFF; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span>
+      <div><div style="font-weight: 700; font-size: 15px">Add your closet</div><div style="font-size: 13px; color: #4F5551">Snap a photo, add a few details.</div></div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center; background: #FFFFFF; border-radius: 14px; padding: 12px 14px">
+      <span style="width: 32px; height: 32px; border-radius: 999px; background: #0369A1; color: #FFFFFF; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+      <div><div style="font-weight: 700; font-size: 15px">Search in plain words</div><div style="font-size: 13px; color: #4F5551">Style, size and budget in one line.</div></div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center; background: #FFFFFF; border-radius: 14px; padding: 12px 14px">
+      <span style="width: 32px; height: 32px; border-radius: 999px; background: #0369A1; color: #FFFFFF; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span>
+      <div><div style="font-weight: 700; font-size: 15px">Get matches that go with what you own</div><div style="font-size: 13px; color: #4F5551">Outfit ideas using your own pieces.</div></div>
+    </div>
+  </section>
+
+  <footer style="margin-top: auto; padding: 14px 20px 18px; font-size: 12px; line-height: 1.5; color: #4F5551">
+    <span style="font-weight: 700; color: #1B1E1C">One search, 6 US stores:</span> eBay · Etsy · Depop · Poshmark · Mercari · Facebook Marketplace
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
