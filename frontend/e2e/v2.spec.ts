@@ -116,7 +116,7 @@ test.describe("signed in (v2)", () => {
     await expect(page.getByRole("heading", { name: "Dresses" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Quiet luxury / old money" })).toBeVisible();
     await expect(page.getByRole("button", { name: "burgundy" })).toBeVisible();
-    await expect(page.getByLabel("Min")).toHaveValue("10");
+    await expect(page.getByRole("spinbutton", { name: "Min", exact: true })).toHaveValue("10");
     await page.getByRole("button", { name: "Centimeters" }).click();
     await expect(page.getByText("cm").first()).toBeVisible();
     await shot(page, "profile");
@@ -169,7 +169,7 @@ test.describe("signed in (v2)", () => {
   test("home has pre-filled filters; /dev/traces lists agent runs (B4, A2)", async ({ page }) => {
     await logIn(page);
     await page.goto("/home");
-    await expect(page.getByText(/Pre-filled from your profile/).first()).toBeVisible();
+    await expect(page.getByText(/Pre-filled from your profile/).filter({ visible: true }).first()).toBeVisible();
     if (isDesktop(page)) await expect(page.getByRole("button", { name: /Price: \$10–\$40/ })).toBeVisible();
     await shot(page, "home");
     await noHorizontalScroll(page);

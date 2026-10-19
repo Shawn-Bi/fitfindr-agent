@@ -408,7 +408,7 @@ export function FilterBar({
         {!support.location.available && (
           <span className="text-xs text-muted">Location: {support.location.note}</span>
         )}
-        {fromProfile && <span className="text-xs text-muted">· Pre-filled from your profile</span>}
+        {fromProfile && <span className="text-xs text-muted">Pre-filled from your profile</span>}
       </div>
 
       {sheet && (

@@ -491,6 +491,7 @@ import sqlite3
 
 _EMBED_DB = config.CACHE_DIR / "embeddings.sqlite"
 _embed_lock = threading.Lock()
+EMBED_BATCH = 25
 
 
 def _embed_db():
@@ -525,8 +526,10 @@ def embed(texts: list[str], task: str = "SEMANTIC_SIMILARITY", patient: bool = T
 
     missing = [(k, t) for k, t in dict(zip(keys, texts)).items() if k not in found]
     from google.genai import types
-    for start in range(0, len(missing), 100):          # the API takes ≤ 100 texts per call
-        batch = missing[start:start + 100]
+    # The API takes ≤ 100 texts per call, but the free tier counts each text against
+    # a per-minute limit, so smaller batches get through where 100 would be refused.
+    for start in range(0, len(missing), EMBED_BATCH):
+        batch = missing[start:start + EMBED_BATCH]
         response = _request(model, lambda client, b=batch: client.models.embed_content(
             model=model, contents=[t for _, t in b],
             config=types.EmbedContentConfig(task_type=task, output_dimensionality=config.EMBED_DIM)),
