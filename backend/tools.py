@@ -166,10 +166,14 @@ def search_with_status(
     max_price: float | None = None,
     wardrobe: dict | None = None,
     limit: int | None = None,
+    keep_unsized: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     """
     search_listings() plus the per-store statuses (active, cached, paused…)
     the results page shows. `wardrobe` only changes the order within a store.
+    keep_unsized: also keep listings whose store sent no size (eBay never
+    does), after the ones that match `size`. The web API uses this when the
+    size came from the profile rather than the query.
     """
     words = [w for w in _tokens(description) if len(w) > 2]
     candidates, statuses = fetch_candidates(description, max_price=max_price)
@@ -183,7 +187,8 @@ def search_with_status(
         seen.add(key)
         if max_price is not None and item["price"] > max_price:
             continue
-        if size and not size_matches(size, item["size"]):
+        if size and not size_matches(size, item["size"]) \
+                and not (keep_unsized and item["size"] is None):
             continue
         if not allow_kids and is_kids_item(item):
             continue
@@ -191,7 +196,10 @@ def search_with_status(
         score = sum(1 for w in words if w in text)
         if score > 0:
             results.append((score, item))
-    return _mix_stores(results, wardrobe)[:limit or config.SEARCH_RESULT_LIMIT], statuses
+    mixed = _mix_stores(results, wardrobe)
+    if size and keep_unsized:   # known size matches first; stable, so store mixing holds
+        mixed.sort(key=lambda it: it["size"] is None)
+    return mixed[:limit or config.SEARCH_RESULT_LIMIT], statuses
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────

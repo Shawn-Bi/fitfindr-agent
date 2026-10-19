@@ -107,10 +107,12 @@ export function ListingCard({
   listing,
   reason,
   imageHeight = "h-[150px] md:h-[170px]",
+  noteMissingSize = false,
 }: {
   listing: Listing;
   reason?: string | null;
   imageHeight?: string;
+  noteMissingSize?: boolean;
 }) {
   const title = cleanTitle(listing.title);
   return (
@@ -124,7 +126,7 @@ export function ListingCard({
         <ListingImage listing={listing} className={`${imageHeight} w-full`} />
         <div className="flex flex-col gap-[3px] px-3 pb-3 pt-2.5">
           <h3 className="m-0 line-clamp-2 text-sm font-bold leading-tight">{title}</h3>
-          <div className="text-[13px] text-muted">{listingMeta(listing)}</div>
+          <div className="text-[13px] text-muted">{listingMeta(listing, noteMissingSize)}</div>
           <div className="text-base font-bold">{money(listing.price)}</div>
           {reason && <div className="text-xs text-primary">{reason}</div>}
           <span className="sr-only">Opens on {STORE_LABELS[listing.platform]} in a new tab</span>

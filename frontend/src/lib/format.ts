@@ -76,6 +76,11 @@ export function cleanTitle(title: string): string {
   return noTags.replace(/\s+/g, " ").trim() || title.trim();
 }
 
-export function listingMeta(l: { size: string | null; condition: string | null; platform: Platform }) {
-  return [l.size, l.condition, STORE_LABELS[l.platform]].filter(Boolean).join(" · ");
+/** "M · good · Depop". With noteMissingSize, a listing without a size says so (a size filter is on). */
+export function listingMeta(
+  l: { size: string | null; condition: string | null; platform: Platform },
+  noteMissingSize = false,
+) {
+  const size = l.size ?? (noteMissingSize ? "size not listed" : null);
+  return [size, l.condition, STORE_LABELS[l.platform]].filter(Boolean).join(" · ");
 }

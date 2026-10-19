@@ -80,7 +80,8 @@ function Chips({ chips, onRemove }: { chips: Chip[]; onRemove: (c: Chip) => void
 function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
   const store = STORE_LABELS[item.platform];
   const updated = timeAgo(item.updated_at);
-  const meta = [item.size, item.condition, store, updated && `updated ${updated}`].filter(Boolean).join(" · ");
+  const size = item.size ?? (data.parsed.size ? "size not listed" : null);
+  const meta = [size, item.condition, store, updated && `updated ${updated}`].filter(Boolean).join(" · ");
   const styling = data.styling;
   const title = cleanTitle(item.title);
   return (
@@ -339,7 +340,12 @@ function Results() {
                       </h2>
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(180px,1fr))] md:gap-3.5">
                         {more.map((r) => (
-                          <ListingCard key={`${r.platform}-${r.id}`} listing={r} imageHeight="h-[120px] md:h-[170px]" />
+                          <ListingCard
+                            key={`${r.platform}-${r.id}`}
+                            listing={r}
+                            imageHeight="h-[120px] md:h-[170px]"
+                            noteMissingSize={!!data.parsed.size}
+                          />
                         ))}
                       </div>
                       <p className="mb-0 mt-2 text-xs text-muted">Price and stock may change on the original site.</p>

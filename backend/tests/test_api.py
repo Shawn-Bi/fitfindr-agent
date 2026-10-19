@@ -267,6 +267,17 @@ class CatalogTest(unittest.TestCase):
         for m in catalog.item_matches(sources.recent_pool(), owned):
             self.assertNotEqual(catalog.listing_category(m["listing"]), "tops")
 
+    def test_profile_size_keeps_unsized_listings_after_matches(self):
+        from tools import search_with_status
+        strict, _ = search_with_status("vintage graphic tee", "M", 30)
+        lenient, _ = search_with_status("vintage graphic tee", "M", 30, keep_unsized=True, limit=40)
+        self.assertTrue(all(size_matches("M", r["size"]) for r in strict))
+        self.assertGreater(len(lenient), len(strict))
+        self.assertIn("ebay", {r["platform"] for r in lenient})
+        sized = [r["size"] is not None for r in lenient]
+        self.assertEqual(sized, sorted(sized, reverse=True), "size matches must come first")
+        self.assertTrue(all(r["size"] is None or size_matches("M", r["size"]) for r in lenient))
+
     def test_size_matching(self):
         self.assertTrue(size_matches("M", "S/M"))
         self.assertFalse(size_matches("M", "XL"))

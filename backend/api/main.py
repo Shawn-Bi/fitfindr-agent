@@ -222,10 +222,12 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
 
     wardrobe = _wardrobe(closet)
     found: dict = {}
+    size_from_profile = any(c["key"] == "size" and c["from_profile"] for c in chips)
 
     def direct_search(description, size, max_price):
         results, statuses = search_with_status(description, size, max_price, wardrobe=wardrobe,
-                                               limit=config.WEB_RESULT_LIMIT)
+                                               limit=config.WEB_RESULT_LIMIT,
+                                               keep_unsized=size_from_profile)
         found.update(results=results, statuses=statuses)
         return results
 
