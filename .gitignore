@@ -30,5 +30,22 @@ Thumbs.db
 
 # Private local notes — never commit
 KICKOFF_PROMPT.md
-*.docx
 ~$*
+# Office / notes files of any name
+*.doc
+*.docx
+*.rtf
+*.pages
+*.xls
+*.xlsx
+*.numbers
+# Anything named like "...API..." / "...key..." / "...secret..." that is a note,
+# not code. (A bare *API* would also hide backend/api/ — Windows git ignores case.)
+*API*.txt
+*API*.pdf
+*API*.csv
+*API*.json
+*API*.md
+*[Kk]ey*.txt
+*[Ss]ecret*.txt
+*[Cc]redential*
