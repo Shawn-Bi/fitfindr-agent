@@ -8,6 +8,10 @@ caption. Scope: `docs/PRD.md`. Rules for working on it: `CLAUDE.md`.
 Stores: Depop, Poshmark, Mercari and eBay (Fashion Resale API) and Etsy are
 live; Facebook Marketplace is "Coming soon" (see `BLOCKERS.md`).
 
+**Live:** https://fitfindr-ten.vercel.app (app, Vercel) ·
+https://fitfindr-api.onrender.com/health (API, Render free plan — the first
+request after 15 idle minutes takes about a minute).
+
 ## Run it locally (live data, 24 h cache)
 
 Local development uses **live store data**. Every store search is cached for
@@ -61,3 +65,4 @@ cd frontend; npx playwright test
 ## Deploy
 
 `docs/DEPLOY.md` (Render for the API, Vercel for the app, Supabase for data).
+Deployed from branch `v2` on 2026-10-19; the live URLs are at the top.

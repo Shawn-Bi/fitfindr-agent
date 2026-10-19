@@ -5,6 +5,32 @@ Backend (FastAPI) on **Render**, frontend (Next.js) on **Vercel**, data on the
 about 45 minutes. Nothing here costs money, and no key is ever pasted into a
 file — only into the Render and Vercel dashboards.
 
+## Current deployment (2026-10-19, branch `v2`)
+
+| What | Where |
+|---|---|
+| App (share this) | https://fitfindr-ten.vercel.app |
+| API | https://fitfindr-api.onrender.com (`/health` → `{"ok":true,"data_mode":"live","env":"production"}`) |
+| Render service | `fitfindr-api` (`srv-dbb6bs4s728c73ffegpg`), workspace TradeAgent, free plan, Oregon, auto-deploy off |
+| Vercel project | `fitfindr`, team `shawn-9964`, Root Directory `frontend` |
+| CORS on Render | `FRONTEND_ORIGINS=https://fitfindr-ten.vercel.app,https://fitfindr-shawn-9964.vercel.app`, `FRONTEND_ORIGIN_REGEX=^https://fitfindr-[a-z0-9]+-shawn-9964\.vercel\.app$` |
+
+Notes from this deploy:
+
+- **Redeploy the API:** Render dashboard → fitfindr-api → **Manual Deploy** →
+  *Deploy latest commit* (auto-deploy is off on purpose).
+- **Redeploy the app:** Vercel blocks CLI deploys from the repo folder because
+  the commit author's email (the GitHub no-reply address) isn't a member of the
+  `shawn-9964` team. Either connect that GitHub account under Vercel → Account
+  Settings → Authentication, or deploy a clean export of the commit:
+  `git archive HEAD` into an empty folder, copy `.vercel/` into it, run
+  `npx vercel deploy --prod` there. The root `.vercelignore` keeps the upload to
+  `frontend/` and `docs/legal/` (the Terms and Privacy pages read those files).
+- `NEXT_PUBLIC_SUPABASE_URL` must be the bare project URL; the frontend now
+  also strips a trailing `/rest/v1` like the backend does.
+- `NEXT_PUBLIC_*` values are baked in at build time: after changing one on
+  Vercel, redeploy.
+
 You'll deploy in this order, because each step needs a URL from the one before:
 
 1. Check the database is up to date (2 min)
@@ -109,8 +135,10 @@ that takes about a minute. That's normal.
 `FRONTEND_ORIGINS` → paste your Vercel URL exactly, e.g.
 `https://fitfindr-xxxx.vercel.app` (https, no trailing `/`). If you also want
 Vercel preview deploys to work, set `FRONTEND_ORIGIN_REGEX` to
-`^https://fitfindr(-[a-z0-9-]+)?\.vercel\.app$` (adjust `fitfindr` to your
-project name). **Save, rebuild and deploy**.
+`^https://fitfindr-[a-z0-9]+-<your-team>\.vercel\.app$` (adjust `fitfindr` to your
+project name). Keep the team slug in it: a looser pattern such as
+`fitfindr(-…)?\.vercel\.app` would also allow anyone else's Vercel project whose
+name starts with `fitfindr-`. **Save, rebuild and deploy**.
 
 **Supabase (redirects for confirmation and password-reset emails):**
 dashboard → your project → **Authentication** → **URL Configuration**:

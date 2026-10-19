@@ -1,4 +1,5 @@
-# Render blueprint for the FitFindr API. Prepared, not deployed — see docs/DEPLOY.md.
+# Render blueprint for the FitFindr API. Deployed 2026-10-19 as
+# https://fitfindr-api.onrender.com — see docs/DEPLOY.md.
 #
 # Production runs live: APP_ENV=production refuses to start with fixtures, and
 # every RapidAPI call is counted in Supabase api_usage and stops at 40/month/host
@@ -35,7 +36,7 @@ services:
         value: gemini-2.5-flash-image
       - key: FRONTEND_ORIGINS          # the Vercel URL, e.g. https://fitfindr.vercel.app (no trailing /)
         sync: false
-      - key: FRONTEND_ORIGIN_REGEX     # optional: Vercel preview URLs, e.g. ^https://fitfindr(-[a-z0-9-]+)?\.vercel\.app$
+      - key: FRONTEND_ORIGIN_REGEX     # optional: Vercel preview URLs, e.g. ^https://fitfindr-[a-z0-9]+-shawn-9964\.vercel\.app$
         sync: false
       - key: GEMINI_API_KEY
         sync: false
