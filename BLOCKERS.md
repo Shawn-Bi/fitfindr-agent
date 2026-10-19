@@ -26,12 +26,6 @@ Full v2 details: `docs/V2_REPORT.md`.
    semantic ranking consistent, and a full 5-try judged eval (about 35 judge
    calls) needs a paid tier or two days.
 
-9. **Judge scores still to collect** (needs the judge quota, which resets at
-   midnight Pacific time): the v2 eval has scores for 4 of 25 tries, and the rebuilt stylist
-   outfits (21/30 pieces with a listing) have none. Commands are at the top of
-   `docs/V2_REPORT.md`. Re-score the outfits before about 06:10 Oct 20, while
-   the cached searches are still under 24 h old, so it needs no RapidAPI calls.
-
 6. **Free Render plan sleeps after 15 minutes.** A closet-item outfit that is
    still being built when the server sleeps is lost; the page shows "Style this
    piece" and the user can press it again.
@@ -41,3 +35,9 @@ Full v2 details: `docs/V2_REPORT.md`.
 
 8. **npm audit** advisories in build tooling from `create-next-app@15` (not in
    shipped browser code); `npm audit fix --force` would jump major versions.
+
+9. **Judge scores still to collect** (needs the judge quota, which resets at
+   midnight Pacific time): the v2 eval has scores for 4 of 25 tries, and the rebuilt stylist
+   outfits (21/30 pieces with a listing) have none. Commands are at the top of
+   `docs/V2_REPORT.md`. Re-score the outfits before about 06:10 Oct 20, while
+   the cached searches are still under 24 h old, so it needs no RapidAPI calls.
