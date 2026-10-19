@@ -1,5 +1,6 @@
 -- FitFindr database schema (PRD v2.2, section 7).
 -- Paste into Supabase → SQL Editor → Run. Safe to re-run.
+-- Then apply supabase/migrations/ in order: `python backend/scripts/migrate.py`.
 --
 -- User tables (profiles, closet_items, saved_items): row-level security so each
 -- signed-in user can only read and write their own rows.

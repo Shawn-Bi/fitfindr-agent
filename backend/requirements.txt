@@ -34,3 +34,5 @@ httpx>=0.27,<1.0
 # Closet photos: resize, thumbnail, strip metadata; HEIC from iPhones.
 pillow>=10.0,<12.0
 pillow-heif>=0.18,<2.0
+# Applies supabase/migrations/*.sql (scripts/migrate.py). Not used by the API itself.
+psycopg[binary]>=3.2,<4
