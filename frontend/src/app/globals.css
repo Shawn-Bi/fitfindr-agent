@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* FitFindr design tokens (CLAUDE.md, docs/prototype). */
+@theme {
+  --color-primary: #0369a1;
+  --color-primary-hover: #075985;
+  --color-accent: #0284c7;
+  --color-sky: #7dd3fc;
+  --color-tint: #dceffb;
+  --color-bg: #f2f8fc;
+  --color-surface: #ffffff;
+  --color-ink: #1b1e1c;
+  --color-ink-soft: #2f3431;
+  --color-muted: #4f5551;
+  --color-line: #c9cdc6;
+  --color-line-soft: #daddd7;
+  --color-line-blue: #d6e4ee;
+  --color-line-dash: #c3d6e3;
+  --color-danger: #b42318;
+  --color-success: #067647;
+
+  --font-heading: var(--font-space-grotesk), "Segoe UI", Arial, sans-serif;
+  --font-sans: var(--font-dm-sans), "Segoe UI", Arial, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--color-primary);
+}
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+/* Horizontal scrollers (style cards, category tabs) without a visible bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
