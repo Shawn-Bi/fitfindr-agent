@@ -256,6 +256,31 @@ class OutfitPicturesTest(unittest.TestCase):
         self.assertIn("No person", text)
 
 
+class FallbackModelTest(unittest.TestCase):
+    def test_spent_daily_quota_answers_with_the_fallback_model(self):
+        import generate
+        from generate import ModelUnavailable
+        calls = []
+
+        def fake_request(model, do_call, retries=None):
+            calls.append(model)
+            if model == config.MODEL:
+                raise ModelUnavailable("Daily free-tier quota used up for this model; it resets at midnight Pacific time.")
+            return mock.Mock(text="ok")
+
+        with mock.patch("generate._request", side_effect=fake_request),              mock.patch("config.FALLBACK_MODEL", "fallback-model"):
+            self.assertEqual(generate.generate("hi", cache=False), "ok")
+        self.assertEqual(calls, [config.MODEL, "fallback-model"])
+
+    def test_other_errors_are_not_retried(self):
+        import generate
+        from generate import ModelUnavailable
+        with mock.patch("generate._request", side_effect=ModelUnavailable("bad key")) as req,              mock.patch("config.FALLBACK_MODEL", "fallback-model"):
+            with self.assertRaises(ModelUnavailable):
+                generate.generate("hi", cache=False)
+        self.assertEqual(req.call_count, 1)
+
+
 class ProfileSizesTest(unittest.TestCase):
     def test_sizes_summary_for_the_stylist(self):
         text = catalog.sizes_summary({"size_range": ["petite"], "tops": ["S"], "bottoms_waist": ["28"],

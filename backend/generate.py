@@ -455,8 +455,17 @@ def generate(
         from google.genai import types
         contents = [types.Part.from_bytes(data=image[0], mime_type=image[1]), prompt]
 
-    response = _request(model, lambda client: client.models.generate_content(
-        model=model, contents=contents, config=call_config))
+    try:
+        response = _request(model, lambda client: client.models.generate_content(
+            model=model, contents=contents, config=call_config))
+    except ModelUnavailable as exc:
+        # A spent daily quota won't come back today: answer with the fallback model instead.
+        if "daily" not in str(exc).lower() or not config.FALLBACK_MODEL or model == config.FALLBACK_MODEL:
+            raise
+        print(f"  [quota] {model} is out of daily quota; using {config.FALLBACK_MODEL}.",
+              file=sys.stderr, flush=True)
+        return generate(prompt, system=system, cache=cache, temperature=temperature,
+                        json_mode=json_mode, model=config.FALLBACK_MODEL, image=image)
     text = (response.text or "").strip()
     if use_cache:
         _cache_write(key, text)

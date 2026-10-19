@@ -337,21 +337,21 @@ function Results() {
     });
   }
 
+  // What the user set (the URL) shows at once; the server's answer fills in the
+  // profile's price, sizes and gender where the user set nothing.
   const shownFilters: SearchFilters = useMemo(() => {
     const f = data?.filters;
-    if (!f) return state.filters;
+    const s = state.filters;
+    if (!f) return s;
+    const userPrice = s.min_price != null || s.max_price != null || state.no_price;
     return {
-      min_price: f.min_price,
-      max_price: f.max_price,
-      sizes: f.sizes,
-      conditions: f.conditions,
-      colors: f.colors,
-      gender: f.gender,
-      within_days: f.within_days,
-      stores: f.stores,
-      location: state.filters.location,
+      ...s,
+      min_price: userPrice ? s.min_price : f.min_price,
+      max_price: userPrice ? s.max_price : f.max_price,
+      sizes: s.sizes != null ? s.sizes : state.no_size ? [] : f.sizes,
+      gender: s.gender ?? f.gender,
     };
-  }, [data, state.filters]);
+  }, [data, state.filters, state.no_price, state.no_size]);
 
   const best = data?.results[0];
   const more = useMemo(

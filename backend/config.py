@@ -108,6 +108,9 @@ SEARCH_RESULT_LIMIT = 10
 # ─── Model ───────────────────────────────────────────────────────────────────
 
 MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
+# Used for one retry when MODEL's free-tier DAILY quota is spent (it resets at
+# midnight Pacific), so styling and outfit picks keep working. Empty = off.
+FALLBACK_MODEL = os.getenv("FITFINDR_FALLBACK_MODEL", "gemini-3-flash-preview").strip()
 # LLM-as-judge (run_eval.py, stylist eval): a different, stronger model than the
 # one being judged, so it isn't grading its own homework.
 JUDGE_MODEL = os.getenv("FITFINDR_JUDGE_MODEL", "gemini-3.5-flash")
@@ -122,6 +125,7 @@ EMBEDDINGS_ENABLED = os.getenv("FITFINDR_EMBEDDINGS", "1") != "0"
 PRICES_PER_M = {
     "gemini-3.5-flash-lite": (0.10, 0.40),
     "gemini-3.5-flash": (0.30, 2.50),
+    "gemini-3-flash-preview": (0.50, 3.00),
     "gemini-embedding-001": (0.15, 0.0),
 }
 
