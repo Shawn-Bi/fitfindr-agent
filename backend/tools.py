@@ -381,3 +381,126 @@ def create_fit_card(outfit, new_item: dict) -> str:
               "Use the item's exact title, word for word, once. "
               "Mention the price and platform once each, and be specific about the vibe.")
     return generate(prompt)
+
+
+# ── The buyer's verdict (B1) ──────────────────────────────────────────────────
+# The fit card is now a short buyer's verdict around the caption: an AI
+# estimate of original retail and era (labelled as an estimate, with
+# confidence; "unknown" when not confident), value, a condition check and a
+# Worth it / Fair deal / Skip verdict. One model call writes all of it; the
+# arithmetic (% off) and the condition grade are done in code, from the data.
+
+VERDICTS = ("Worth it", "Fair deal", "Skip")
+CONFIDENCE = ("high", "medium", "low")
+
+
+def create_fit_card_full(outfit, new_item: dict) -> dict:
+    """
+    Returns {"caption": str, "verdict": dict | None}. `caption` is exactly what
+    create_fit_card() returns (buyer voice, item + price + platform once
+    each). `verdict` is None when the model's answer couldn't be read; the
+    caption still stands.
+    """
+    if isinstance(outfit, dict):
+        outfit = outfit.get("text") or ""
+    if not outfit or not outfit.strip():
+        return {"caption": create_fit_card(outfit, new_item), "verdict": None}
+    import attributes
+
+    condition = new_item.get("condition") or "not stated"
+    prompt = (
+        "You help a US shopper decide whether to buy a secondhand clothing listing.\n"
+        f"Listing title: {new_item['title']}\n"
+        f"Price: ${new_item['price']:.2f} on {new_item['platform']}\n"
+        f"Brand (from the store): {new_item.get('brand') or 'not stated'}\n"
+        f"Condition (from the store): {condition}\n"
+        f"Size: {new_item.get('size') or 'not stated'}\n"
+        f"Outfit idea: {outfit}\n\n"
+        "Answer with JSON only, in this shape:\n"
+        '{"caption": "<2-4 sentence social caption>",\n'
+        ' "retail_estimate": {"low": <USD number or null>, "high": <USD number or null>, '
+        '"confidence": "high|medium|low"},\n'
+        ' "era": {"label": "<e.g. late 1990s, 2010s, current season, or null>", '
+        '"confidence": "high|medium|low"},\n'
+        ' "brand_value": "<one short sentence: how well this brand/style holds its value>",\n'
+        ' "longevity": "classic|trend-driven|mixed",\n'
+        ' "condition_notes": "<one short sentence from the condition and title only>",\n'
+        ' "verdict": "Worth it|Fair deal|Skip",\n'
+        ' "reasons": ["<short reason>", "<short reason>", "<optional third>"]}\n\n'
+        "Rules:\n"
+        "- The caption is written by the shopper who found and bought it: use words like "
+        "'found', 'scored', 'snagged' or 'just bought'. Never the seller: never say you listed "
+        "it, are selling it, or mention your shop or store. Use the item's exact title, word for "
+        "word, once; mention the price and the platform once each; be specific about the vibe.\n"
+        "- retail_estimate is what this item cost new at full price. If you don't recognise the "
+        "brand or can't tell, use null numbers and confidence low. Never guess wildly.\n"
+        "- era: only name one when the title gives real evidence (a year, 'vintage 90s', a "
+        "discontinued line); otherwise label null and confidence low.\n"
+        "- condition_notes: say only what the condition field and title state; if the condition "
+        "isn't stated, say so.\n"
+        "- verdict: Worth it = clearly good value for its condition; Fair deal = roughly what it "
+        "should cost; Skip = overpriced, poor condition, or a red flag. Give 2-3 reasons, each "
+        "under 12 words.")
+    raw = generate(prompt, json_mode=True)
+    return parse_fit_card(raw, new_item, attributes.condition_bucket(new_item.get("condition")))
+
+
+def _num(value) -> float | None:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def parse_fit_card(raw: str, item: dict, condition_grade: str | None) -> dict:
+    """Model JSON → {"caption", "verdict"}; estimates below medium confidence become unknown."""
+    cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
+    try:
+        data = json.loads(cleaned)
+    except (json.JSONDecodeError, TypeError):
+        data = None
+    if not isinstance(data, dict):
+        text = (raw or "").strip()
+        return {"caption": text or f"Found {item['title']} for ${item['price']:.0f} on {item['platform']}.",
+                "verdict": None}
+
+    caption = str(data.get("caption") or "").strip()
+    est = data.get("retail_estimate") or {}
+    confidence = str(est.get("confidence") or "low").lower()
+    low, high = _num(est.get("low")), _num(est.get("high"))
+    if low and high and low > high:
+        low, high = high, low
+    retail = None
+    if confidence in ("high", "medium") and (low or high):
+        low, high = low or high, high or low
+        mid = (low + high) / 2
+        pct = round((1 - item["price"] / mid) * 100)
+        retail = {"low": round(low), "high": round(high), "confidence": confidence,
+                  "pct_off": pct if pct > 0 else None, "above_retail": pct < 0}
+    era = data.get("era") or {}
+    era_conf = str(era.get("confidence") or "low").lower()
+    era_out = ({"label": str(era["label"]).strip()[:40], "confidence": era_conf}
+               if era.get("label") and era_conf in ("high", "medium") else None)
+    verdict = str(data.get("verdict") or "").strip()
+    verdict = next((v for v in VERDICTS if v.lower() == verdict.lower()), None)
+    reasons = [str(r).strip()[:120] for r in (data.get("reasons") or []) if str(r).strip()][:3]
+    longevity = str(data.get("longevity") or "").lower()
+    import attributes
+    return {
+        "caption": caption or f"Found {item['title']} for ${item['price']:.0f} on {item['platform']}.",
+        "verdict": {
+            "retail": retail,                     # None → "unknown" in the UI
+            "era": era_out,                       # None → "unknown"
+            "brand_value": str(data.get("brand_value") or "").strip()[:200] or None,
+            "longevity": longevity if longevity in ("classic", "trend-driven", "mixed") else None,
+            "condition": {
+                "grade": condition_grade,         # from the store's own field, not the model
+                "label": attributes.CONDITION_LABELS.get(condition_grade) if condition_grade else None,
+                "stated": item.get("condition"),
+                "notes": str(data.get("condition_notes") or "").strip()[:200] or None,
+            },
+            "verdict": verdict,
+            "reasons": reasons,
+        },
+    }

@@ -35,59 +35,134 @@ COMPLEMENTS = {
 _STYLE_WORDS = ("vintage", "y2k", "streetwear", "minimalist", "grunge", "cottagecore")
 
 
-def _size_for(description: str, sizes: dict) -> str | None:
-    """The profile size that fits what's being searched: waist for bottoms, US shoe size for shoes."""
+# ── Profile v2 (B3) ──────────────────────────────────────────────────────────
+
+SIZE_KEYS = ("tops", "bottoms_waist", "bottoms_inseam", "bottoms", "dresses", "shoes")
+GENDERS = ("women", "men", "both")
+FITS = ("slim", "regular", "relaxed", "oversized")
+STYLES = ("Vintage", "Y2K", "Streetwear", "Minimalist", "Grunge", "Cottagecore",
+          "Business casual / workwear", "Classic / preppy", "Dark / goth", "Boho", "Athleisure",
+          "Quiet luxury / old money", "Romantic / feminine", "Western", "Coastal", "Avant-garde")
+
+
+def normalize_sizes(sizes: dict | None) -> dict:
+    """
+    v2 sizes are lists per category. Old profiles stored one value per key
+    (top, waist, length, shoe); those are read into the matching lists.
+    """
+    sizes = sizes or {}
+    out = {k: [str(v).strip() for v in sizes.get(k) or [] if str(v).strip()]
+           for k in SIZE_KEYS if isinstance(sizes.get(k), list)}
+    legacy = {"top": "tops", "waist": "bottoms_waist", "length": "bottoms_inseam", "shoe": "shoes"}
+    for old, new in legacy.items():
+        value = str(sizes.get(old) or "").replace("US", "").strip()
+        if value and not out.get(new):
+            out[new] = [value]
+    return {k: out.get(k, []) for k in SIZE_KEYS}
+
+
+def sizes_for(description: str, sizes: dict, gender: str | None = None) -> list[str]:
+    """The profile sizes that fit what's being searched: waist (and XS–XL) for bottoms, US shoe sizes for shoes."""
+    sizes = normalize_sizes(sizes)
     category = listing_category({"title": description})
     if category == "bottoms":
-        return (sizes.get("waist") or "").strip() or None
+        return sizes["bottoms_waist"] + sizes["bottoms"]
     if category == "shoes":
-        return (str(sizes.get("shoe") or "")).replace("US", "").strip() or None
-    if category in ("accessories",):
-        return None
-    return (sizes.get("top") or "").strip() or None
+        return sizes["shoes"]
+    if category == "dresses":
+        return sizes["dresses"] if gender != "men" else []
+    if category == "accessories":
+        return []
+    return sizes["tops"]
+
+
+def profile_prefs(profile: dict | None) -> dict:
+    """What ranking and styling read from the profile."""
+    profile = profile or {}
+    gender = profile.get("gender")
+    return {"gender": gender if gender in ("women", "men") else None,
+            "styles": profile.get("styles") or [], "colors": profile.get("colors") or [],
+            "fit": profile.get("fit"), "measurements": profile.get("measurements") or {}}
 
 
 def _money(value: float) -> str:
     return f"${value:.0f}" if float(value).is_integer() else f"${value:.2f}"
 
 
+def price_label(low: float | None, high: float | None) -> str:
+    if low is not None and high is not None:
+        return f"{_money(low)}–{_money(high)}"
+    if high is not None:
+        return f"under {_money(high)}"
+    return f"over {_money(low)}"
+
+
 def resolve_filters(q: str, profile: dict | None, *, no_size: bool = False,
                     no_price: bool = False, max_price: float | None = None,
+                    min_price: float | None = None, sizes: list[str] | None = None,
                     use_profile: bool = True) -> tuple[dict, list[dict]]:
     """
     Returns (parsed, chips).
-    parsed: {"description", "size", "max_price"} for the agent.
+    parsed: {"description", "size", "sizes", "max_price", "min_price",
+             "size_from_profile"} for the agent and the search.
     chips:  [{"key": "q"|"size"|"price", "label", "from_profile"}] for the UI.
-    The profile's size and budget fill in what the query didn't say (DECISIONS.md #15).
+    The profile's sizes and budget range fill in what the query didn't say
+    (DECISIONS.md #15); explicit filters (B4) beat both.
     """
     parsed = parse_query(q)
     profile = profile or {}
     size_from_profile = price_from_profile = False
 
     if no_size:
-        parsed["size"] = None
-    elif not parsed["size"] and use_profile:
-        parsed["size"] = _size_for(parsed["description"], profile.get("sizes") or {})
-        size_from_profile = bool(parsed["size"])
+        parsed["sizes"] = []
+    elif sizes is not None:
+        parsed["sizes"] = [s for s in sizes if s]
+    elif parsed["size"]:
+        parsed["sizes"] = [parsed["size"]]
+    elif use_profile:
+        parsed["sizes"] = sizes_for(parsed["description"], profile.get("sizes") or {}, profile.get("gender"))
+        size_from_profile = bool(parsed["sizes"])
+    else:
+        parsed["sizes"] = []
+    parsed["size"] = ", ".join(parsed["sizes"]) or None
 
-    if max_price is not None:
-        parsed["max_price"] = float(max_price)
-    elif no_price:
+    parsed["min_price"] = None
+    if no_price:
         parsed["max_price"] = None
-    elif parsed["max_price"] is None and use_profile and profile.get("budget"):
-        parsed["max_price"] = float(profile["budget"])
+    elif max_price is not None or min_price is not None:
+        parsed["max_price"] = float(max_price) if max_price is not None else parsed["max_price"]
+        parsed["min_price"] = float(min_price) if min_price is not None else None
+    elif parsed["max_price"] is None and use_profile and (profile.get("budget") or profile.get("budget_min")):
+        parsed["max_price"] = float(profile["budget"]) if profile.get("budget") else None
+        parsed["min_price"] = float(profile["budget_min"]) if profile.get("budget_min") else None
         price_from_profile = True
+    parsed["size_from_profile"] = size_from_profile
 
     chips = []
     if parsed["description"]:
         chips.append({"key": "q", "label": parsed["description"], "from_profile": False})
-    if parsed["max_price"] is not None:
-        chips.append({"key": "price", "label": f"under {_money(parsed['max_price'])}",
+    if parsed["max_price"] is not None or parsed["min_price"] is not None:
+        chips.append({"key": "price", "label": price_label(parsed["min_price"], parsed["max_price"]),
                       "from_profile": price_from_profile})
     if parsed["size"]:
         chips.append({"key": "size", "label": f"size {parsed['size']}",
                       "from_profile": size_from_profile})
     return parsed, chips
+
+
+# What the results-page filters can rely on in the store data (B4). A filter
+# whose field no live store sends stays visible but disabled — never faked.
+FILTER_SUPPORT = {
+    "price": {"available": True},
+    "size": {"available": True, "note": "eBay listings don't state a size."},
+    "condition": {"available": True, "note": "Matched on the condition each store states."},
+    "colour": {"available": True, "note": "Matched on colours named in the listing title."},
+    "gender": {"available": True, "note": "Matched on Men's / Women's in the title."},
+    "listed_within": {"available": True, "note": "Only Poshmark shares listing dates; other stores' "
+                                                 "items are hidden while this is on."},
+    "location": {"available": False, "note": "Not available for these stores."},
+    "store": {"available": True},
+}
 
 
 def raised_budget(max_price: float) -> int:
@@ -109,8 +184,8 @@ def empty_message(parsed: dict, store_count: int) -> str:
     parts = [f"“{parsed['description']}”"]
     if parsed.get("size"):
         parts.append(f"in size {parsed['size']}")
-    if parsed.get("max_price") is not None:
-        parts.append(f"under {_money(parsed['max_price'])}")
+    if parsed.get("max_price") is not None or parsed.get("min_price") is not None:
+        parts.append(price_label(parsed.get("min_price"), parsed.get("max_price")))
     stores = f"{store_count} store{'s' if store_count != 1 else ''}"
     return f"We searched {stores} for {' '.join(parts)} and found nothing that matches."
 

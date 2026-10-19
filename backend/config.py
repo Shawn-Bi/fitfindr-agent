@@ -137,6 +137,12 @@ def estimated_cost(model: str, prompt_tokens: int, output_tokens: int) -> float:
 AGENT_PLANNER = os.getenv("FITFINDR_PLANNER", "gemini").strip().lower()
 AGENT_MAX_STEPS = 8          # tool calls per run, then the deterministic fallback finishes
 
+# ─── The AI stylist (stylist.py, B2) ─────────────────────────────────────────
+# Live RapidAPI searches one outfit may make when a planned piece has no
+# cached listing (live mode only). Adding or editing a closet item rebuilds its
+# outfit, so this is the per-edit cost against the 40-call monthly stop line.
+STYLIST_LIVE_CALLS = int(os.getenv("FITFINDR_STYLIST_LIVE_CALLS", "1"))
+
 
 # ─── Rate limiting and quota guards ──────────────────────────────────────────
 # You should not need to touch these.

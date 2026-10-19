@@ -30,6 +30,8 @@ from sources import quota, resale  # noqa: E402
 from tools import _parse_outfit, size_matches  # noqa: E402
 
 OUTFIT = {"text": "Wear it with wide-leg khakis.", "item_ids": []}
+CARD = {"caption": "Scored this tee for $12 on Depop!",
+        "verdict": {"verdict": "Worth it", "reasons": ["Cheap", "Classic"], "retail": None}}
 
 
 def _image_bytes(fmt="JPEG", size=(2400, 1800), exif=None, mode="RGB") -> bytes:
@@ -45,7 +47,7 @@ class SearchRouteTest(unittest.TestCase):
         search_limiter._hits.clear()
         self.client = TestClient(app)
 
-    @mock.patch("agent.create_fit_card", return_value="Scored this tee for $12 on Depop!")
+    @mock.patch("agent.create_fit_card_full", return_value=CARD)
     @mock.patch("agent.suggest_outfit", return_value=OUTFIT)
     def test_guest_search_returns_results_styling_and_stores(self, outfit, card):
         r = self.client.post("/search", json={"q": "vintage graphic tee under $30"})
@@ -56,6 +58,7 @@ class SearchRouteTest(unittest.TestCase):
         self.assertTrue(all(x["image_url"] and x["url"] for x in body["results"]))
         self.assertEqual(body["styling"]["text"], OUTFIT["text"])
         self.assertEqual(body["fit_card"], "Scored this tee for $12 on Depop!")
+        self.assertEqual(body["fit_verdict"]["verdict"], "Worth it")
         self.assertFalse(body["personalized"])
         self.assertEqual([c["key"] for c in body["chips"]], ["q", "price"])
         stores = {s["platform"]: s["status"] for s in body["stores"]}
@@ -64,19 +67,22 @@ class SearchRouteTest(unittest.TestCase):
         self.assertEqual(stores["ebay"], "live")
         outfit.assert_called_once()
 
-    @mock.patch("agent.create_fit_card")
+    @mock.patch("agent.create_fit_card_full")
     @mock.patch("agent.suggest_outfit")
     def test_empty_search_skips_model_and_offers_relax(self, outfit, card):
         r = self.client.post("/search", json={"q": "designer ballgown size XXS under $5"})
         body = r.json()
         self.assertEqual(body["results"], [])
         self.assertIn("found nothing", body["empty"]["message"])
+        # the agent already dropped the size once (A1 auto-relax) and said so
+        self.assertEqual(body["relaxed"]["dropped"], "size")
+        self.assertIn("size XXS", body["relaxed"]["message"])
         labels = [o["label"] for o in body["empty"]["relax"]]
-        self.assertEqual(labels, ["Remove size XXS", "Raise budget to $10"])
+        self.assertEqual(labels, ["Raise budget to $10"])
         outfit.assert_not_called()
         card.assert_not_called()
 
-    @mock.patch("agent.create_fit_card", return_value="card")
+    @mock.patch("agent.create_fit_card_full", return_value={"caption": "card", "verdict": None})
     @mock.patch("agent.suggest_outfit", return_value=OUTFIT)
     def test_removing_price_chip_searches_without_it(self, outfit, card):
         body = self.client.post("/search", json={"q": "vintage graphic tee under $5",
@@ -91,7 +97,7 @@ class SearchRouteTest(unittest.TestCase):
         self.assertIn("Your search results still work", body["styling"]["unavailable"])
         self.assertIsNone(body["fit_card"])
 
-    @mock.patch("agent.create_fit_card", return_value="card")
+    @mock.patch("agent.create_fit_card_full", return_value={"caption": "card", "verdict": None})
     @mock.patch("agent.suggest_outfit", return_value=OUTFIT)
     def test_rate_limit_per_ip(self, outfit, card):
         for _ in range(config.SEARCHES_PER_MINUTE):
