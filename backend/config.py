@@ -137,5 +137,18 @@ CACHE_DIR = ROOT / ".cache"
 DATA_DIR = ROOT / "data"                       # example wardrobe only, no listings
 RESULTS_DIR = ROOT / "results"
 FIXTURES_DIR = ROOT / "tests" / "fixtures"     # recorded real API responses
-QUOTA_FILE = ROOT / ".quota.json"              # TODO: move to Supabase api_usage
-CACHE_MAX_AGE_HOURS = 24                       # real-response cache lifetime
+CACHE_MAX_AGE_HOURS = 24                       # real-response cache lifetime (search_cache)
+# The RapidAPI call counter lives in Supabase api_usage (sources/quota.py).
+
+
+# ─── Web API (api/main.py) ───────────────────────────────────────────────────
+
+SEARCHES_PER_MINUTE = 10                       # per signed-in user, or per IP for guests
+WEB_RESULT_LIMIT = 20                          # listings on one results page
+MAX_PHOTO_BYTES = 10 * 1024 * 1024             # 10 MB, PRD section 4
+PHOTO_MAX_PX = 1600                            # main image, longest side
+THUMB_MAX_PX = 400
+# Browser origins allowed to call the API (comma-separated). The Next.js dev
+# server by default; set FRONTEND_ORIGINS to the Vercel URL in production.
+FRONTEND_ORIGINS = [o.strip() for o in os.getenv(
+    "FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]

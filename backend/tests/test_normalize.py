@@ -86,7 +86,13 @@ class SearchListingsFixturesTest(unittest.TestCase):
     def test_fixtures_mode_reads_only_fixtures(self):
         listings, statuses = fetch_candidates("anything")
         self.assertTrue(listings)
-        self.assertTrue(all(s["status"] == "fixtures" for s in statuses))
+        by_platform = {s["platform"]: s["status"] for s in statuses}
+        for platform in ("depop", "poshmark", "mercari", "ebay"):
+            self.assertEqual(by_platform[platform], "fixtures")
+        # not wired up yet: shown as Coming soon, never filled with anything
+        self.assertEqual(by_platform["etsy"], "coming_soon")
+        self.assertEqual(by_platform["fb_marketplace"], "coming_soon")
+        self.assertFalse([x for x in listings if x["platform"] in ("etsy", "fb_marketplace")])
 
     def test_price_ceiling_respected(self):
         results = search_listings("vintage graphic tee", max_price=30)

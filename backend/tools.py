@@ -20,6 +20,7 @@ That last line is what your loop branches on. "Returns a list" earns nothing —
 the description has to say what is *in* the list.
 """
 
+import json
 import re
 
 import config
@@ -52,11 +53,40 @@ def is_kids_item(item: dict) -> bool:
                 or _KIDS_TITLE.search(item.get("title") or ""))
 
 
-def _mix_stores(ranked: list[tuple[int, dict]]) -> list[dict]:
+def _tokens(text) -> list[str]:
+    return [t for t in re.split(r"[\s/(),]+", str(text or "").lower()) if t]
+
+
+def size_matches(size: str, item_size: str | None) -> bool:
+    """
+    Whole-token match, case-insensitive: "M" matches "S/M" but not "XL" or
+    "US 9"; a bare waist like "30" also matches "W30" and "30x32".
+    """
+    wanted = size.lower().strip()
+    for token in _tokens(item_size):
+        if token == wanted:
+            return True
+        if wanted.isdigit() and (token == f"w{wanted}" or token.startswith(f"{wanted}x")):
+            return True
+    return False
+
+
+def closet_affinity(item: dict, wardrobe: dict | None) -> int:
+    """How many of the closet's colors and style tags show up in the listing title."""
+    words = set()
+    for owned in (wardrobe or {}).get("items", []):
+        for value in (owned.get("colors") or []) + (owned.get("style_tags") or []):
+            words.update(w for w in _tokens(value) if len(w) > 2)
+    title = set(_tokens(item.get("title")))
+    return len(words & title)
+
+
+def _mix_stores(ranked: list[tuple[int, dict]], wardrobe: dict | None = None) -> list[dict]:
     """
     Keep keyword-match order, but within each tier of equal score alternate
     stores (round-robin), so one cheap store can't fill the whole page.
-    The top item overall stays first.
+    Within one store, listings that share colors or styles with the user's
+    closet come first. The top item overall stays first.
     """
     mixed = []
     for score in sorted({s for s, _ in ranked}, reverse=True):
@@ -64,6 +94,9 @@ def _mix_stores(ranked: list[tuple[int, dict]]) -> list[dict]:
         for s, item in ranked:
             if s == score:
                 buckets.setdefault(item["platform"], []).append(item)
+        if wardrobe and wardrobe.get("items"):
+            for platform in buckets:
+                buckets[platform].sort(key=lambda it: -closet_affinity(it, wardrobe))
         while buckets:
             for platform in list(buckets):
                 mixed.append(buckets[platform].pop(0))
@@ -124,11 +157,22 @@ def search_listings(
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    def tokens(text):
-        return [t for t in re.split(r"[\s/(),]+", str(text or "").lower()) if t]
+    return search_with_status(description, size, max_price)[0]
 
-    words = [w for w in tokens(description) if len(w) > 2]
-    candidates, _statuses = fetch_candidates(description, max_price=max_price)
+
+def search_with_status(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+    wardrobe: dict | None = None,
+    limit: int | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """
+    search_listings() plus the per-store statuses (active, cached, paused…)
+    the results page shows. `wardrobe` only changes the order within a store.
+    """
+    words = [w for w in _tokens(description) if len(w) > 2]
+    candidates, statuses = fetch_candidates(description, max_price=max_price)
     allow_kids = wants_kids(description)
 
     seen, results = set(), []
@@ -139,7 +183,7 @@ def search_listings(
         seen.add(key)
         if max_price is not None and item["price"] > max_price:
             continue
-        if size and size.lower() not in tokens(item["size"]):
+        if size and not size_matches(size, item["size"]):
             continue
         if not allow_kids and is_kids_item(item):
             continue
@@ -147,12 +191,12 @@ def search_listings(
         score = sum(1 for w in words if w in text)
         if score > 0:
             results.append((score, item))
-    return _mix_stores(results)[:config.SEARCH_RESULT_LIMIT]
+    return _mix_stores(results, wardrobe)[:limit or config.SEARCH_RESULT_LIMIT], statuses
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
 
-def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
+def suggest_outfit(new_item: dict, wardrobe: dict) -> dict:
     """
     Given a thrifted item and the user's wardrobe, suggest one or two outfits.
 
@@ -161,24 +205,17 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
 
     Args:
         new_item: a listing dict — the item the user is considering.
-        wardrobe: a wardrobe dict with an 'items' key holding a list of items.
-                  **It may be empty.** Handle that.
+        wardrobe: a wardrobe dict with an 'items' key holding a list of items,
+                  each with an 'id'. **It may be empty.** Handle that.
 
     Returns:
-        A non-empty string with outfit suggestions.
-        With an empty wardrobe, return general styling advice rather than
-        raising or returning "". Unit 4 has you trigger the empty wardrobe on
-        purpose, so decide now what it should do.
-
-    TODO:
-        1. Check whether wardrobe['items'] is empty.
-        2. If it is, ask the model for general styling ideas for this item.
-        3. If it isn't, format the wardrobe items into the prompt and ask for
-           specific combinations naming pieces the user already owns.
-        4. Return the model's response.
-
-    Test it from a terminal before you move on:
-        python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe; from tools import search_listings; print(suggest_outfit(search_listings('tee')[0], get_example_wardrobe()))"
+        {"text": str, "item_ids": list[str]}
+        text      — non-empty outfit suggestions, 3-5 short sentences.
+        item_ids  — ids of the wardrobe items the text uses, in the order the
+                    model gave them; only ids that really are in the wardrobe.
+                    The results page shows those items' photos.
+        With an empty wardrobe: general styling advice and item_ids == [].
+        (Structured since DECISIONS.md #20; it used to be a plain string.)
     """
     items = wardrobe.get("items", [])
     details = [f"{label}: {new_item[key]}" for key, label in
@@ -190,13 +227,38 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         prompt = (f"A user is thinking about buying this thrifted item: {item_text}. "
                   "They haven't shared their wardrobe. Give 1-2 general outfit "
                   "ideas for it in 3-5 short sentences.")
-    else:
-        owned = "\n".join(f"- {w['name']} ({w['category']})" for w in items)
-        prompt = (f"A user is thinking about buying this thrifted item: {item_text}.\n"
-                  f"Their wardrobe:\n{owned}\n"
-                  "Suggest 1-2 outfits pairing the new item with pieces they own, "
-                  "naming those pieces. Keep it to 3-5 short sentences.")
-    return generate(prompt)
+        return {"text": generate(prompt), "item_ids": []}
+
+    owned = "\n".join(
+        f"- id {w['id']}: {w['name']} ({w['category']}"
+        + (f", {', '.join(w['colors'])}" if w.get("colors") else "") + ")"
+        for w in items)
+    prompt = (f"A user is thinking about buying this thrifted item: {item_text}.\n"
+              f"Their wardrobe:\n{owned}\n"
+              "Suggest 1-2 outfits pairing the new item with 2-4 pieces they own, "
+              "naming those pieces. Keep it to 3-5 short sentences.\n"
+              'Answer with JSON only: {"text": "<the suggestion>", '
+              '"item_ids": ["<id of each wardrobe piece the text names>"]}')
+    return _parse_outfit(generate(prompt, json_mode=True), items)
+
+
+def _parse_outfit(raw: str, items: list[dict]) -> dict:
+    """Model JSON → {"text", "item_ids"}; falls back to the raw text and name matching."""
+    known = {str(w["id"]): w for w in items}
+    text, ids = raw.strip(), []
+    cleaned = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict) and str(data.get("text") or "").strip():
+            text = str(data["text"]).strip()
+            ids = [str(i) for i in data.get("item_ids") or []]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    ids = [i for i in dict.fromkeys(ids) if i in known]
+    if not ids:   # the model skipped the ids: find the pieces the text names
+        lowered = text.lower()
+        ids = [i for i, w in known.items() if str(w.get("name", "")).lower() in lowered]
+    return {"text": text, "item_ids": ids}
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -214,14 +276,14 @@ def seller_voice(text: str) -> list[str]:
     return [m.group(0) for m in SELLER_VOICE.finditer(text or "")]
 
 
-def create_fit_card(outfit: str, new_item: dict) -> str:
+def create_fit_card(outfit, new_item: dict) -> str:
     """
     Write a short caption someone would actually post about the find.
 
     This calls the model too.
 
     Args:
-        outfit:   the outfit suggestion string from suggest_outfit().
+        outfit:   what suggest_outfit() returned (its dict, or just the text).
         new_item: the listing dict for the item.
 
     Returns:
@@ -249,6 +311,8 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from tools import search_listings; print(create_fit_card('jeans and white sneakers', search_listings('tee')[0]))"
     """
+    if isinstance(outfit, dict):
+        outfit = outfit.get("text") or ""
     if not outfit or not outfit.strip():
         return (f"No outfit to caption yet for {new_item.get('title', 'this item')}. "
                 "Run suggest_outfit first, then try again.")

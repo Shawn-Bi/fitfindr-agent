@@ -15,6 +15,7 @@ Wired up last, together with eBay and FB Marketplace. Follow Etsy API terms on i
 SOURCE = "ETSY_API_HOST"                 # env var holding the RapidAPI host; quota key
 PLATFORMS = ("etsy",)
 FIXTURE_PREFIX = "etsy"
+ENABLED = False      # not wired up yet: shown as "Coming soon" (DECISIONS.md #4)
 
 
 def parse(raw) -> list[dict]:
@@ -24,6 +25,11 @@ def parse(raw) -> list[dict]:
     TODO: write once a real response is recorded in tests/fixtures/.
     """
     raise NotImplementedError("etsy.parse: no recorded response yet")
+
+
+def fetch(query: str, max_price: float | None = None) -> dict:
+    """One live request → raw JSON. TODO: implement in the integration pass."""
+    raise NotImplementedError("etsy.fetch: live calls not wired up yet")
 
 
 def search(query: str, max_price: float | None = None) -> list[dict]:

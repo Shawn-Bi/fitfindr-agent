@@ -262,6 +262,7 @@ def generate(
     system: str | None = None,
     cache: bool = True,
     temperature: float | None = None,
+    json_mode: bool = False,
 ) -> str:
     """
     Send a prompt and get text back.
@@ -277,6 +278,8 @@ def generate(
         temperature: how much the model varies between runs. Defaults to
                 config.TEMPERATURE. Pass 0.0 when you want the same answer
                 every time.
+        json_mode: ask the model for a JSON response (application/json). The
+                return value is still the raw text; the caller parses it.
 
     Every call in this course goes through here. If you need to change how the
     model is called, change it in this one place.
@@ -285,7 +288,7 @@ def generate(
 
     use_cache = cache and config.CACHE_ENABLED
     temperature = config.TEMPERATURE if temperature is None else temperature
-    key = _cache_key(prompt, system, temperature)
+    key = _cache_key(prompt + ("\n[json]" if json_mode else ""), system, temperature)
 
     if use_cache:
         hit = _cache_read(key)
@@ -306,6 +309,8 @@ def generate(
             call_config = {"temperature": temperature}
             if system:
                 call_config["system_instruction"] = system
+            if json_mode:
+                call_config["response_mime_type"] = "application/json"
             kwargs = {
                 "model": config.MODEL,
                 "contents": prompt,

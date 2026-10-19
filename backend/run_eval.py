@@ -172,6 +172,23 @@ def write_report(rows, args):
         "",
     ] + [f"- {name}, try {i}: {phrases}" for name, i, phrases in bad]
 
+    # Automatic check: with a closet, the outfit names at least one closet item
+    # (PRD section 8: 4 of 5 tries). suggest_outfit returns the ids it used.
+    styled = [(row["scenario"]["name"], i, (r["session"] or {}).get("outfit_suggestion"))
+              for row in rows if row["scenario"]["wardrobe"] == "example"
+              for i, r in enumerate(row["tries"], 1)
+              if r["session"] and (r["session"] or {}).get("outfit_suggestion")]
+    no_closet = [(name, i) for name, i, outfit in styled if not (outfit or {}).get("item_ids")]
+    lines += [
+        "",
+        "## Automatic check: outfit uses the closet",
+        "",
+        f"Outfits (example wardrobe) naming at least one closet item: "
+        f"**{len(styled) - len(no_closet)} / {len(styled)}**"
+        + (" — PASS" if len(styled) - len(no_closet) >= 0.8 * len(styled) else " — FAIL"),
+        "",
+    ] + [f"- {name}, try {i}: no closet item ids" for name, i in no_closet]
+
     lines += [
         "",
         "> The Try and Verdict columns are blank on purpose. Whether a try",
@@ -211,9 +228,12 @@ def write_report(rows, args):
                 f"- search_results: {len(session.get('search_results') or [])}",
                 "",
             ]
+            if session.get("styling_error"):
+                lines += [f"- styling unavailable: {session['styling_error']}", ""]
             if session.get("outfit_suggestion"):
-                lines += ["Outfit suggestion:", "", "```",
-                          str(session["outfit_suggestion"]), "```", ""]
+                outfit = session["outfit_suggestion"]
+                lines += ["Outfit suggestion:", "", "```", str(outfit.get("text")), "```", "",
+                          f"Closet items used: {outfit.get('item_ids') or '(none)'}", ""]
             if session.get("fit_card"):
                 lines += ["Fit card:", "", "```", str(session["fit_card"]), "```", ""]
             if record["trace"]:
@@ -227,6 +247,7 @@ def write_report(rows, args):
     print(f"Wrote {path.relative_to(config.ROOT)}")
     print(f"Buyer voice: {len(cards) - len(bad)}/{len(cards)} fit cards"
           + (" — PASS" if not bad else f" — FAIL ({len(bad)} sound like the seller)"))
+    print(f"Closet items named: {len(styled) - len(no_closet)}/{len(styled)} outfits")
     print(generate.usage())
     print("\nCommit this file. It's the evidence the test actually happened.")
 

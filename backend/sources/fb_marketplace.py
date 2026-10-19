@@ -15,6 +15,7 @@ Wired up last. Hard quota of 50/month (stop at 40). City filtering is phase 2.
 SOURCE = "FB_MARKETPLACE_HOST"                 # env var holding the RapidAPI host; quota key
 PLATFORMS = ("fb_marketplace",)
 FIXTURE_PREFIX = "fb"
+ENABLED = False      # not wired up yet: shown as "Coming soon" (DECISIONS.md #4)
 
 
 def parse(raw) -> list[dict]:
@@ -24,6 +25,11 @@ def parse(raw) -> list[dict]:
     TODO: write once a real response is recorded in tests/fixtures/.
     """
     raise NotImplementedError("fb_marketplace.parse: no recorded response yet")
+
+
+def fetch(query: str, max_price: float | None = None) -> dict:
+    """One live request → raw JSON. TODO: implement in the integration pass."""
+    raise NotImplementedError("fb_marketplace.fetch: live calls not wired up yet")
 
 
 def search(query: str, max_price: float | None = None) -> list[dict]:

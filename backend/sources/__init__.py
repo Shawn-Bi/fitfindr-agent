@@ -2,11 +2,16 @@
 All listing sources, behind one call.
 
     from sources import fetch_candidates
-    listings = fetch_candidates("vintage graphic tee")
+    listings, statuses = fetch_candidates("vintage graphic tee")
 
 fixtures mode → every tests/fixtures/<prefix>_*.json, parsed by its adapter.
-live mode     → each adapter's live search(); a paused or not-yet-wired store
-                is skipped and reported in `statuses`, never filled with fixtures.
+live mode     → a ≤ 24 h search_cache copy if there is one, else the adapter's
+                live fetch() (counted by quota.py) and the response is cached.
+                A paused store with no cache is skipped and reported in
+                `statuses`, never filled with fixtures.
+
+Adapters with ENABLED = False (Etsy, FB Marketplace until their integration
+pass) are reported as "coming_soon" in both modes.
 
 Filtering, scoring and dedupe happen in tools.search_listings.
 """
@@ -15,7 +20,7 @@ import json
 import logging
 
 import config
-from sources import etsy, fb_marketplace, quota, resale
+from sources import cache, etsy, fb_marketplace, quota, resale
 
 log = logging.getLogger("fitfindr.sources")
 
@@ -32,27 +37,58 @@ def _from_fixtures(adapter) -> list[dict]:
     return listings
 
 
+def _statuses(adapter, status: str, **extra) -> list[dict]:
+    return [{"platform": p, "status": status, **extra} for p in adapter.PLATFORMS]
+
+
 def fetch_candidates(query: str, max_price: float | None = None) -> tuple[list[dict], list[dict]]:
     """
     Returns (listings, statuses). statuses has one entry per platform, e.g.
     {"platform": "ebay", "status": "paused", "resumes": "2026-11-01"}.
+    status is one of: fixtures, active, cached, paused, coming_soon, error.
     """
     listings, statuses = [], []
     for adapter in ADAPTERS:
+        if not adapter.ENABLED:
+            statuses += _statuses(adapter, "coming_soon")
+            continue
         if config.DATA_MODE == "fixtures":
             listings.extend(_from_fixtures(adapter))
-            statuses += [{"platform": p, "status": "fixtures"} for p in adapter.PLATFORMS]
+            statuses += _statuses(adapter, "fixtures")
+            continue
+
+        key = cache.query_hash(query, max_price)
+        raw = cache.get(key, adapter.FIXTURE_PREFIX)
+        if raw is not None:
+            listings.extend(adapter.parse(raw))
+            statuses += _statuses(adapter, "cached")
             continue
         try:
-            listings.extend(adapter.search(query, max_price=max_price))
+            raw = adapter.fetch(query, max_price=max_price)
+            cache.put(key, adapter.FIXTURE_PREFIX, raw)
+            listings.extend(adapter.parse(raw))
             statuses += [quota.status(adapter.SOURCE, p) for p in adapter.PLATFORMS]
         except quota.QuotaPaused as paused:
-            # TODO: serve this store's ≤ 24 h search_cache entry when one exists.
-            statuses += [{"platform": p, "status": "paused", "resumes": paused.resumes}
-                         for p in adapter.PLATFORMS]
-        except NotImplementedError:
-            statuses += [{"platform": p, "status": "unavailable"} for p in adapter.PLATFORMS]
+            statuses += _statuses(adapter, "paused", resumes=paused.resumes)
         except Exception:  # noqa: BLE001 — one broken store must not break search
             log.exception("source %s failed", adapter.__name__)
-            statuses += [{"platform": p, "status": "error"} for p in adapter.PLATFORMS]
+            statuses += _statuses(adapter, "error")
     return listings, statuses
+
+
+def recent_pool() -> list[dict]:
+    """
+    Listings already on hand, for Home picks and closet-item matches: fixtures
+    in fixtures mode, ≤ 24 h search_cache responses in live mode. Never makes
+    a live call (DECISIONS.md #19).
+    """
+    listings = []
+    for adapter in ADAPTERS:
+        if not adapter.ENABLED:
+            continue
+        if config.DATA_MODE == "fixtures":
+            listings.extend(_from_fixtures(adapter))
+        else:
+            for raw in cache.recent(adapter.FIXTURE_PREFIX):
+                listings.extend(adapter.parse(raw))
+    return listings
