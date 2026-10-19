@@ -22,10 +22,11 @@ import config
 log = logging.getLogger("fitfindr.cache")
 
 
-def query_hash(query: str, max_price: float | None = None) -> str:
+def query_hash(query: str, max_price: float | None = None, min_price: float | None = None) -> str:
     words = " ".join(str(query or "").lower().split())
     price = "" if max_price is None else f"{float(max_price):.2f}"
-    return hashlib.sha256(f"{words}|{price}".encode("utf-8")).hexdigest()[:40]
+    low = "" if min_price is None else f"|min{float(min_price):.2f}"   # old keys unchanged
+    return hashlib.sha256(f"{words}|{price}{low}".encode("utf-8")).hexdigest()[:40]
 
 
 def _cutoff() -> str:

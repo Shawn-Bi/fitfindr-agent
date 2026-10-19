@@ -9,9 +9,9 @@ Pure helpers behind the web routes: no network, no model, easy to test.
 """
 
 import math
-import re
 
 from agent import parse_query
+from attributes import listing_category  # noqa: F401 — re-exported for callers and tests
 from tools import closet_affinity, is_kids_item
 
 STORE_LABELS = {
@@ -21,19 +21,6 @@ STORE_LABELS = {
 STORE_ORDER = ("ebay", "etsy", "depop", "poshmark", "mercari", "fb_marketplace")
 
 CATEGORIES = ("tops", "bottoms", "outerwear", "dresses", "shoes", "accessories")
-
-# Listing title keywords → closet category. Checked in this order, so
-# "denim jacket" is outerwear, not bottoms.
-_CATEGORY_WORDS = (
-    ("dresses", r"dress|gown|romper|jumpsuit"),
-    ("outerwear", r"jacket|coat|parka|blazer|windbreaker|anorak|puffer|vest|cardigan|fleece|overshirt"),
-    ("shoes", r"shoes?|sneakers?|boots?|heels|loafers?|sandals?|trainers?|clogs?|mules?|flats|oxfords?"),
-    ("bottoms", r"pants|jeans|trousers|shorts|skirts?|slacks|joggers|chinos|leggings|cargos?|corduroys?"),
-    ("accessories", r"bags?|belts?|hats?|caps?|scarf|scarves|beanie|necklace|earrings|sunglasses|wallet|tote"),
-    ("tops", r"tees?|t-shirts?|tshirts?|shirts?|tops?|blouses?|tanks?|sweaters?|hoodies?|sweatshirts?|"
-             r"crewnecks?|polos?|flannels?|jerseys?|camis?|henleys?"),
-)
-_CATEGORY_RES = [(c, re.compile(rf"\b({words})\b", re.I)) for c, words in _CATEGORY_WORDS]
 
 # What to look for when styling a closet item of each category.
 COMPLEMENTS = {
@@ -46,14 +33,6 @@ COMPLEMENTS = {
 }
 
 _STYLE_WORDS = ("vintage", "y2k", "streetwear", "minimalist", "grunge", "cottagecore")
-
-
-def listing_category(item: dict) -> str | None:
-    text = f"{item.get('title') or ''} {item.get('category') or ''}"
-    for category, pattern in _CATEGORY_RES:
-        if pattern.search(text):
-            return category
-    return None
 
 
 def _size_for(description: str, sizes: dict) -> str | None:

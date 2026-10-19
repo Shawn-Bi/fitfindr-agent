@@ -41,7 +41,8 @@ def _statuses(adapter, status: str, **extra) -> list[dict]:
     return [{"platform": p, "status": status, **extra} for p in adapter.PLATFORMS]
 
 
-def fetch_candidates(query: str, max_price: float | None = None) -> tuple[list[dict], list[dict]]:
+def fetch_candidates(query: str, max_price: float | None = None,
+                     min_price: float | None = None) -> tuple[list[dict], list[dict]]:
     """
     Returns (listings, statuses). statuses has one entry per platform, e.g.
     {"platform": "ebay", "status": "paused", "resumes": "2026-11-01"}.
@@ -57,14 +58,14 @@ def fetch_candidates(query: str, max_price: float | None = None) -> tuple[list[d
             statuses += _statuses(adapter, "fixtures")
             continue
 
-        key = cache.query_hash(query, max_price)
+        key = cache.query_hash(query, max_price, min_price)
         raw = cache.get(key, adapter.FIXTURE_PREFIX)
         if raw is not None:
             listings.extend(adapter.parse(raw))
             statuses += _statuses(adapter, "cached")
             continue
         try:
-            raw = adapter.fetch(query, max_price=max_price)
+            raw = adapter.fetch(query, max_price=max_price, min_price=min_price)
             cache.put(key, adapter.FIXTURE_PREFIX, raw)
             listings.extend(adapter.parse(raw))
             statuses += [quota.status(adapter.SOURCE, p) for p in adapter.PLATFORMS]

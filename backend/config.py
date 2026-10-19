@@ -108,6 +108,34 @@ SEARCH_RESULT_LIMIT = 10
 # ─── Model ───────────────────────────────────────────────────────────────────
 
 MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
+# LLM-as-judge (run_eval.py, stylist eval): a different, stronger model than the
+# one being judged, so it isn't grading its own homework.
+JUDGE_MODEL = os.getenv("FITFINDR_JUDGE_MODEL", "gemini-3.5-flash")
+# Semantic ranking (A4): query and listing texts are embedded and compared.
+EMBED_MODEL = os.getenv("FITFINDR_EMBED_MODEL", "gemini-embedding-001")
+EMBED_DIM = 256
+EMBEDDINGS_ENABLED = os.getenv("FITFINDR_EMBEDDINGS", "1") != "0"
+
+# Estimated USD per 1M tokens (input, output), for the cost column in traces.
+# Paid-tier list prices as of Oct 2026; the free tier costs nothing. Update from
+# ai.google.dev/pricing if they change — these are estimates, not a bill.
+PRICES_PER_M = {
+    "gemini-3.5-flash-lite": (0.10, 0.40),
+    "gemini-3.5-flash": (0.30, 2.50),
+    "gemini-embedding-001": (0.15, 0.0),
+}
+
+
+def estimated_cost(model: str, prompt_tokens: int, output_tokens: int) -> float:
+    price_in, price_out = PRICES_PER_M.get(model, (0.30, 2.50))
+    return (prompt_tokens * price_in + output_tokens * price_out) / 1_000_000
+
+
+# ─── The tool-choosing agent (agent.py, A1) ──────────────────────────────────
+# gemini: the model picks each next tool by function calling.
+# rules:  the deterministic policy (also the fallback when the model fails).
+AGENT_PLANNER = os.getenv("FITFINDR_PLANNER", "gemini").strip().lower()
+AGENT_MAX_STEPS = 8          # tool calls per run, then the deterministic fallback finishes
 
 
 # ─── Rate limiting and quota guards ──────────────────────────────────────────
@@ -127,6 +155,7 @@ MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
 
 REQUESTS_PER_MINUTE = 15
 SESSION_REQUEST_BUDGET = 300
+RUN_REQUEST_BUDGET = 25      # model calls inside one metered run (one search, one outfit)
 MAX_RETRIES = 5
 
 CACHE_DIR = ROOT / ".cache"

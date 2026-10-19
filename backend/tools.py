@@ -81,30 +81,6 @@ def closet_affinity(item: dict, wardrobe: dict | None) -> int:
     return len(words & title)
 
 
-def _mix_stores(ranked: list[tuple[int, dict]], wardrobe: dict | None = None) -> list[dict]:
-    """
-    Keep keyword-match order, but within each tier of equal score alternate
-    stores (round-robin), so one cheap store can't fill the whole page.
-    Within one store, listings that share colors or styles with the user's
-    closet come first. The top item overall stays first.
-    """
-    mixed = []
-    for score in sorted({s for s, _ in ranked}, reverse=True):
-        buckets: dict[str, list[dict]] = {}
-        for s, item in ranked:
-            if s == score:
-                buckets.setdefault(item["platform"], []).append(item)
-        if wardrobe and wardrobe.get("items"):
-            for platform in buckets:
-                buckets[platform].sort(key=lambda it: -closet_affinity(it, wardrobe))
-        while buckets:
-            for platform in list(buckets):
-                mixed.append(buckets[platform].pop(0))
-                if not buckets[platform]:
-                    del buckets[platform]
-    return mixed
-
-
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
 
 def search_listings(
@@ -167,19 +143,56 @@ def search_with_status(
     wardrobe: dict | None = None,
     limit: int | None = None,
     keep_unsized: bool = False,
+    *,
+    sizes: list[str] | None = None,
+    min_price: float | None = None,
+    filters: dict | None = None,
+    prefs: dict | None = None,
+    patient: bool = True,
+    info: dict | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     search_listings() plus the per-store statuses (active, cached, paused…)
-    the results page shows. `wardrobe` only changes the order within a store.
-    keep_unsized: also keep listings whose store sent no size (eBay never
-    does), after the ones that match `size`. The web API uses this when the
-    size came from the profile rather than the query.
-    """
-    words = [w for w in _tokens(description) if len(w) > 2]
-    candidates, statuses = fetch_candidates(description, max_price=max_price)
-    allow_kids = wants_kids(description)
+    the results page shows.
 
-    seen, results = set(), []
+    keep_unsized: also keep listings whose store sent no size (eBay never
+        does), after the ones that match. The web API uses this when the size
+        came from the profile rather than the query.
+    sizes:   several acceptable sizes (profile multi-select); `size` is one.
+    min_price: low end of the price range.
+    filters: the results-page filters (B4): conditions, colors, stores,
+        within_days, gender. Each one only keeps listings whose data states
+        the value; see attributes.py.
+    prefs:   {gender, styles, colors, fit} from the profile. Gender is a hard
+        filter (a women's shopper never sees men's items); the rest only
+        nudge the order.
+    patient: wait out embedding rate limits (scripts) or fall back to keyword
+        ranking at once (web requests).
+    info:    optional dict filled with {"ranking": "semantic"|"keyword",
+        "dropped": {...}} for the trace.
+
+    Order: dedupe → price/size/kids/gender/filters → at least one query word
+    → drop clear category/colour/fabric mismatches → semantic rerank.
+    """
+    import attributes
+    import ranking
+
+    filters = filters or {}
+    prefs = dict(prefs or {})
+    wanted_sizes = [s for s in (sizes or ([size] if size else [])) if s]
+    words = [w for w in _tokens(description) if len(w) > 2]
+    candidates, statuses = fetch_candidates(description, max_price=max_price, min_price=min_price)
+    allow_kids = wants_kids(description)
+    gender = filters.get("gender") if "gender" in filters else prefs.get("gender")
+    query_gender = attributes.query_gender(description)
+    if query_gender:                       # "men's jacket" from a women's profile: the query wins
+        gender = query_gender
+    conditions = set(filters.get("conditions") or [])
+    colors = set(filters.get("colors") or [])
+    stores = set(filters.get("stores") or [])
+    within = filters.get("within_days")
+
+    seen, pool = set(), []
     for item in candidates:
         key = (item["platform"], item["id"])
         if key in seen:
@@ -187,19 +200,52 @@ def search_with_status(
         seen.add(key)
         if max_price is not None and item["price"] > max_price:
             continue
-        if size and not size_matches(size, item["size"]) \
+        if min_price is not None and item["price"] < min_price:
+            continue
+        if wanted_sizes and not any(size_matches(s, item["size"]) for s in wanted_sizes) \
                 and not (keep_unsized and item["size"] is None):
             continue
         if not allow_kids and is_kids_item(item):
             continue
-        text = " ".join(filter(None, [item["title"], item.get("condition")])).lower()
-        score = sum(1 for w in words if w in text)
-        if score > 0:
-            results.append((score, item))
-    mixed = _mix_stores(results, wardrobe)
-    if size and keep_unsized:   # known size matches first; stable, so store mixing holds
-        mixed.sort(key=lambda it: it["size"] is None)
-    return mixed[:limit or config.SEARCH_RESULT_LIMIT], statuses
+        if not attributes.gender_ok(item, gender):
+            continue
+        if conditions and attributes.condition_bucket(item.get("condition")) not in conditions:
+            continue
+        if colors and not (attributes.colors_in(item["title"]) & colors):
+            continue
+        if stores and item["platform"] not in stores:
+            continue
+        if within and not _listed_within(item, within):
+            continue
+        text = " ".join(filter(None, [item["title"], item.get("condition"), item.get("category")])).lower()
+        if any(w in text for w in words):
+            pool.append(item)
+
+    if wardrobe and wardrobe.get("items"):
+        prefs["closet_words"] = {w for owned in wardrobe["items"]
+                                 for v in (owned.get("colors") or []) + (owned.get("style_tags") or [])
+                                 for w in _tokens(v) if len(w) > 2}
+    ranked, rank_info = ranking.rerank(description, pool, prefs=prefs, patient=patient)
+    if info is not None:
+        info.update(ranking=rank_info["method"], dropped=rank_info["dropped"])
+    if wanted_sizes and keep_unsized:   # known size matches first; stable, so the order holds
+        ranked.sort(key=lambda it: it["size"] is None)
+    return ranked[:limit or config.SEARCH_RESULT_LIMIT], statuses
+
+
+def _listed_within(item: dict, days: int) -> bool:
+    """True if the store says it was listed in the last `days` days (False when it doesn't say)."""
+    import datetime as dt
+    raw = item.get("listed_at")
+    if not raw:
+        return False
+    try:
+        listed = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if listed.tzinfo is None:
+        listed = listed.replace(tzinfo=dt.timezone.utc)
+    return dt.datetime.now(dt.timezone.utc) - listed <= dt.timedelta(days=days)
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────

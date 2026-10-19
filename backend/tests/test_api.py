@@ -13,6 +13,8 @@ import unittest
 from unittest import mock
 
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
+os.environ["FITFINDR_EMBEDDINGS"] = "0"         # no network: keyword ranking
+os.environ["FITFINDR_PLANNER"] = "rules"        # no network: the deterministic agent policy
 
 from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
@@ -215,7 +217,7 @@ class LiveModeSourcesTest(unittest.TestCase):
              mock.patch("sources.cache.put") as put, \
              mock.patch.object(resale, "fetch", return_value=raw) as fetch:
             sources.fetch_candidates("flannel shirt", max_price=20)
-        fetch.assert_called_once_with("flannel shirt", max_price=20)
+        fetch.assert_called_once_with("flannel shirt", max_price=20, min_price=None)
         put.assert_called_once()
 
 

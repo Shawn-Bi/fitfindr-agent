@@ -14,6 +14,8 @@ Every adapter in this package returns a list of these:
         "condition":  str | None,   # optional
         "updated_at": str | None,   # optional, ISO 8601
         "category":   str | None,   # optional, the store's own category label
+        "brand":      str | None,   # optional (v2: fit-card value check)
+        "listed_at":  str | None,   # optional, ISO 8601 date the seller listed it (v2: "Listed within")
     }
 
 Rule: a value the API didn't give us is None. Never invent one.
@@ -28,7 +30,7 @@ import re
 PLATFORMS = ("depop", "poshmark", "mercari", "etsy", "ebay", "fb_marketplace")
 
 REQUIRED_FIELDS = ("id", "title", "price", "size", "platform", "url", "image_url")
-OPTIONAL_FIELDS = ("condition", "updated_at", "category")
+OPTIONAL_FIELDS = ("condition", "updated_at", "category", "brand", "listed_at")
 
 
 def parse_price(value) -> float | None:
@@ -53,7 +55,7 @@ def clean_str(value) -> str | None:
 
 def make_listing(*, id, title, price, platform, url,
                  size=None, image_url=None, condition=None, updated_at=None,
-                 category=None) -> dict | None:
+                 category=None, brand=None, listed_at=None) -> dict | None:
     """
     Build one standard listing dict, or return None if it isn't usable
     (no id, title, url or price). Callers drop the Nones.
@@ -69,6 +71,8 @@ def make_listing(*, id, title, price, platform, url,
         "condition": clean_str(condition),
         "updated_at": clean_str(updated_at),
         "category": clean_str(category),
+        "brand": clean_str(brand),
+        "listed_at": clean_str(listed_at),
     }
     if not all(listing[k] for k in ("id", "title", "url", "platform")) or listing["price"] is None:
         return None
@@ -80,7 +84,8 @@ def make_listing(*, id, title, price, platform, url,
 # Raw listing fields seen in recorded responses (tests/fixtures/resale_*.json):
 #   id, platform, title, price (number), currency, size, brand, images (list),
 #   url, seller {id}, category, created_at, condition (sometimes)
-# eBay items have no size or category (both None).
+# eBay items have no size or category (both None). Only Poshmark sends
+# created_at (the listing date), which becomes listed_at.
 # Response-level: search_metadata.scraped_at = when the API fetched the data.
 
 RESALE_PLATFORMS = ("depop", "poshmark", "mercari", "ebay")
@@ -119,4 +124,6 @@ def from_resale(item: dict, fetched_at: str | None = None) -> dict | None:
         condition=item.get("condition"),
         updated_at=item.get("updated_at") or fetched_at,
         category=item.get("category"),
+        brand=item.get("brand"),
+        listed_at=item.get("created_at"),
     )
