@@ -51,6 +51,8 @@ export interface SearchFilters {
   gender: GenderFilter | null;
   within_days: 1 | 7 | 30 | null;
   stores: Platform[];
+  /** US ZIP or city for FB Marketplace; null = the profile's (default New York, NY). */
+  location: string | null;
 }
 
 export type FilterKey = "price" | "size" | "condition" | "colour" | "gender" | "listed_within" | "location" | "store";
@@ -70,10 +72,14 @@ export interface FitVerdict {
 export interface SearchResponse {
   query: string;
   parsed: { description: string; size: string | null; sizes?: string[]; max_price: number | null; min_price?: number | null };
-  filters?: Omit<SearchFilters, "gender"> & { gender: GenderFilter; sizes: string[]; location: null };
+  filters?: Omit<SearchFilters, "gender" | "location"> & { gender: GenderFilter; sizes: string[]; location: string | null };
   filter_support?: FilterSupport;
   agent?: { planner: string; steps: string[]; ranking: string | null };
   relaxed?: { dropped: "size" | "budget"; label: string; message: string; new_max_price?: number } | null;
+  /** Fewer than 4 results: what the search widened, step by step, in one line. */
+  broadened?: { steps: string[]; message: string; max_price: number | null; dropped_size: boolean } | null;
+  /** A filter-change search: results only; styling comes from POST /search/style. */
+  styling_deferred?: boolean;
   clarify?: { question: string; suggestions: string[] } | null;
   fit_verdict?: FitVerdict | null;
   chips: Chip[];
@@ -86,7 +92,7 @@ export interface SearchResponse {
   profile: { sizes: Sizes; budget: number | null; budget_min?: number | null; gender?: Gender | null } | null;
   styling: { text: string | null; items: StylingItem[]; unavailable: string | null } | null;
   fit_card: string | null;
-  empty: { message: string; relax: { label: string; params: Record<string, unknown> }[] } | null;
+  empty: { title?: string; message: string; relax: { label: string; params: Record<string, unknown> }[] } | null;
 }
 
 export type Category = "tops" | "bottoms" | "outerwear" | "dresses" | "shoes" | "accessories";
@@ -110,14 +116,21 @@ export interface ClosetItem {
   updated_at: string;
 }
 
-/** v2 sizes: several per category (B3). */
+export type SizeRange = "regular" | "petite" | "plus";
+
+/** US retail size groups (backend api/catalog.py SIZE_KEYS), several values each. */
 export interface Sizes {
+  size_range: SizeRange[];
   tops: string[];
   bottoms_waist: string[];
   bottoms_inseam: string[];
-  bottoms: string[];
-  dresses: string[];
   shoes: string[];
+  men_tops: string[];
+  men_neck: string[];
+  men_sleeve: string[];
+  men_waist: string[];
+  men_inseam: string[];
+  men_shoes: string[];
 }
 
 export type Gender = "women" | "men" | "both";
@@ -139,6 +152,7 @@ export interface Profile {
   colors: string[];
   budget: number | null;
   budget_min: number | null;
+  location: string;
   gender: Gender | null;
   fit: Fit | null;
   measurements: Measurements;
@@ -169,10 +183,20 @@ export interface OutfitPiece {
   material: string | null;
   search: string;
   why: string | null;
+  /** listing = passed the strict check; closest = closest real listing; ai_preview = generated picture; idea = swatches only. */
+  kind?: "listing" | "closest" | "ai_preview" | "idea";
   listing: Listing | null;
   found_at: string | null;
   match_reason: string | null;
+  closest_note?: string | null;
+  preview_url?: string | null;
   expired?: boolean;
+}
+
+export interface StyleResponse {
+  styling: { text: string | null; items: StylingItem[]; unavailable: string | null };
+  fit_card: string | null;
+  fit_verdict: FitVerdict | null;
 }
 
 export interface Outfit {

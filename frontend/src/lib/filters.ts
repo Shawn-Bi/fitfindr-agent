@@ -9,6 +9,7 @@ export const EMPTY_FILTERS: SearchFilters = {
   gender: null,
   within_days: null,
   stores: [],
+  location: null,
 };
 
 const list = (v: string | null) => (v ? v.split(",").filter(Boolean) : []);
@@ -27,6 +28,7 @@ export function filtersFromParams(p: URLSearchParams): SearchFilters {
     gender: gender === "women" || gender === "men" || gender === "any" ? (gender as GenderFilter) : null,
     within_days: within === 1 || within === 7 || within === 30 ? within : null,
     stores: list(p.get("stores")) as Platform[],
+    location: p.get("loc") || null,
   };
 }
 
@@ -41,6 +43,7 @@ export function filtersToParams(f: SearchFilters, p: URLSearchParams = new URLSe
   set("gender", f.gender);
   set("within", f.within_days != null ? String(f.within_days) : null);
   set("stores", f.stores.join(","));
+  set("loc", f.location);
   return p;
 }
 
@@ -55,6 +58,7 @@ export function filtersToBody(f: SearchFilters) {
     gender: f.gender,
     within_days: f.within_days,
     stores: f.stores,
+    location: f.location,
   };
 }
 

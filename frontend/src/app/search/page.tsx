@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { BuyerVerdict } from "@/components/BuyerVerdict";
 import { FilterBar } from "@/components/FilterBar";
@@ -16,7 +16,7 @@ import { StorePanel } from "@/components/StoreBar";
 import { api, ApiError } from "@/lib/api";
 import { filtersFromParams, filtersToBody, filtersToParams } from "@/lib/filters";
 import { cleanTitle, money, STORE_LABELS, timeAgo } from "@/lib/format";
-import type { Chip, Listing, SearchFilters, SearchResponse } from "@/lib/types";
+import type { Chip, Listing, SearchFilters, SearchResponse, StyleResponse } from "@/lib/types";
 
 interface SearchState {
   q: string;
@@ -67,7 +67,7 @@ function Chips({ chips, onRemove }: { chips: Chip[]; onRemove: (c: Chip) => void
   );
 }
 
-function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
+function BestMatch({ item, data, styling: stylingBusy }: { item: Listing; data: SearchResponse; styling: boolean }) {
   const store = STORE_LABELS[item.platform];
   const updated = timeAgo(item.updated_at);
   const size = item.size ?? (data.parsed.size ? "size not listed" : null);
@@ -126,7 +126,9 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
               ))}
             </ul>
           )}
-          {styling?.unavailable ? (
+          {stylingBusy && !styling ? (
+            <Spinner label="Styling this find with your closet" />
+          ) : styling?.unavailable ? (
             <p className="m-0 text-[13px] text-muted">{styling.unavailable}</p>
           ) : (
             <p className="m-0 text-[13px] leading-[1.45] md:text-sm md:leading-normal">{styling?.text}</p>
@@ -227,27 +229,56 @@ function Results() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [styling, setStyling] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  // A filter or chip change re-searches at once with style=false (no model
+  // calls); a new query, a refresh or a back/forward visit runs the full agent.
+  const quickNext = useRef(false);
+  const dataRef = useRef<SearchResponse | null>(null);
+  dataRef.current = data;
   const key = `${buildUrl(state)}|${session?.user.id || ""}`;
+
+  /** Styling + fit card for the best match after a quick search; reused when the best match didn't change. */
+  const styleBest = useCallback((d: SearchResponse, previous: SearchResponse | null, signal: AbortSignal) => {
+    const best = d.results[0];
+    if (!d.styling_deferred || !best) return;
+    const prevBest = previous?.results[0];
+    if (prevBest && previous?.styling && prevBest.platform === best.platform && prevBest.id === best.id) {
+      setData({ ...d, styling: previous.styling, fit_card: previous.fit_card, fit_verdict: previous.fit_verdict });
+      return;
+    }
+    setStyling(true);
+    api<StyleResponse>("/search/style", { json: { q: d.query, listing: best }, signal })
+      .then((r) => setData((cur) => (cur && cur.results[0]?.id === best.id ? { ...cur, ...r } : cur)))
+      .catch(() => undefined)
+      .finally(() => setStyling(false));
+  }, []);
 
   const run = useCallback(
     (signal?: AbortSignal) => {
       if (!state.q) return;
+      const previous = dataRef.current;
+      const quick = quickNext.current && previous != null && previous.query === state.q && !previous.clarify;
+      quickNext.current = false;
       setBusy(true);
       setError(null);
-      setHidden(new Set());
+      if (!quick) setHidden(new Set());
+      const ctrl = new AbortController();
+      signal?.addEventListener("abort", () => ctrl.abort());
       api<SearchResponse>("/search", {
         json: {
           q: state.q,
           no_size: state.no_size,
           no_price: state.no_price,
           ...filtersToBody(state.filters),
+          style: !quick,
         },
-        signal,
+        signal: ctrl.signal,
       })
         .then((d) => {
           setData(d);
           setBusy(false);
+          styleBest(d, previous, ctrl.signal);
         })
         .catch((e) => {
           if ((e as Error).name === "AbortError") return;
@@ -262,44 +293,48 @@ function Results() {
   useEffect(() => {
     if (authLoading) return;
     const ctrl = new AbortController();
-    run(ctrl.signal);
-    return () => ctrl.abort();
+    // Quick searches wait for a short pause, so several chip taps make one search.
+    const t = setTimeout(() => run(ctrl.signal), quickNext.current ? 300 : 0);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
   }, [run, authLoading]);
+
+  /** Filters live in the URL (refresh and back keep them); replace, so each tap isn't a history entry. */
+  function go(next: SearchState) {
+    quickNext.current = true;
+    router.replace(buildUrl(next), { scroll: false });
+  }
 
   function removeChip(c: Chip) {
     if (c.key === "q") return router.push(session ? "/home" : "/");
-    if (c.key === "size") return router.push(buildUrl({ ...state, no_size: true, filters: { ...state.filters, sizes: null } }));
+    if (c.key === "size") return go({ ...state, no_size: true, filters: { ...state.filters, sizes: null } });
     if (c.key === "price")
-      return router.push(
-        buildUrl({ ...state, no_price: true, filters: { ...state.filters, min_price: null, max_price: null } }),
-      );
+      return go({ ...state, no_price: true, filters: { ...state.filters, min_price: null, max_price: null } });
   }
 
   function relax(params: Record<string, unknown>) {
-    router.push(
-      buildUrl({
-        ...state,
-        no_size: params.no_size ? true : state.no_size,
-        no_price: typeof params.max_price === "number" ? false : state.no_price,
-        filters: {
-          ...state.filters,
-          sizes: params.no_size ? null : state.filters.sizes,
-          max_price: typeof params.max_price === "number" ? params.max_price : state.filters.max_price,
-        },
-      }),
-    );
+    go({
+      ...state,
+      no_size: params.no_size ? true : state.no_size,
+      no_price: typeof params.max_price === "number" ? false : state.no_price,
+      filters: {
+        ...state.filters,
+        sizes: params.no_size ? null : state.filters.sizes,
+        max_price: typeof params.max_price === "number" ? params.max_price : state.filters.max_price,
+      },
+    });
   }
 
   function applyFilters(next: SearchFilters) {
     // Explicit filters replace the profile's; clearing a price or size means "none".
-    router.push(
-      buildUrl({
-        ...state,
-        no_size: next.sizes != null && next.sizes.length === 0,
-        no_price: next.min_price == null && next.max_price == null,
-        filters: next,
-      }),
-    );
+    go({
+      ...state,
+      no_size: next.sizes != null && next.sizes.length === 0,
+      no_price: next.min_price == null && next.max_price == null,
+      filters: next,
+    });
   }
 
   const shownFilters: SearchFilters = useMemo(() => {
@@ -314,6 +349,7 @@ function Results() {
       gender: f.gender,
       within_days: f.within_days,
       stores: f.stores,
+      location: state.filters.location,
     };
   }, [data, state.filters]);
 
@@ -364,15 +400,22 @@ function Results() {
               <FilterBar
                 value={shownFilters}
                 support={data?.filter_support}
-                onApply={applyFilters}
+                onChange={applyFilters}
                 fromProfile={!!data?.chips.some((c) => c.from_profile)}
+                resultCount={data && !data.clarify ? data.results.length : null}
+                busy={busy}
               />
             </div>
 
-            {busy && (
+            {busy && !data && (
               <div className="flex flex-col gap-2 px-4 py-10 md:px-0" aria-live="polite">
                 <Spinner label="Searching stores and styling the best match" />
                 <p className="m-0 text-sm text-muted">This can take a few seconds.</p>
+              </div>
+            )}
+            {busy && data && (
+              <div className="px-4 pt-3 md:px-0" aria-live="polite">
+                <Spinner label="Updating results" />
               </div>
             )}
             {error && !busy && (
@@ -381,9 +424,20 @@ function Results() {
               </div>
             )}
 
-            {data && !busy && !error && (
-              <div className="mt-3.5 flex flex-col gap-5 md:mt-5 md:flex-row md:items-start">
+            {data && !error && (
+              <div
+                className={`mt-3.5 flex flex-col gap-5 transition-opacity md:mt-5 md:flex-row md:items-start ${busy ? "opacity-60" : ""}`}
+                aria-busy={busy}
+              >
                 <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-4 md:px-0">
+                  {data.broadened && !data.empty && (
+                    <div role="status" className="flex items-start gap-2 rounded-xl bg-tint p-3 text-sm">
+                      <span aria-hidden="true" className="font-bold text-primary-hover">
+                        ↔
+                      </span>
+                      <span>{data.broadened.message}</span>
+                    </div>
+                  )}
                   {data.relaxed && (
                     <div role="status" className="flex items-start gap-2 rounded-xl bg-tint p-3 text-sm">
                       <span aria-hidden="true" className="font-bold text-primary-hover">
@@ -403,7 +457,7 @@ function Results() {
                     />
                   ) : data.empty ? (
                     <section className="flex flex-col gap-3 rounded-[18px] bg-surface p-5" aria-live="polite">
-                      <h1 className="m-0 font-heading text-xl font-bold">No matches yet</h1>
+                      <h1 className="m-0 font-heading text-xl font-bold">{data.empty.title || "No matches yet"}</h1>
                       <p className="m-0 text-[15px]">{data.empty.message}</p>
                       {data.empty.relax.length > 0 && (
                         <div className="flex flex-wrap gap-2">
@@ -422,7 +476,7 @@ function Results() {
                       <p className="m-0 text-sm text-muted">Or try different words — fewer, broader terms usually find more.</p>
                     </section>
                   ) : (
-                    best && <BestMatch item={best} data={data} />
+                    best && <BestMatch item={best} data={data} styling={styling} />
                   )}
 
                   {more.length > 0 && (
@@ -501,7 +555,7 @@ function Results() {
                 )}
               </div>
             )}
-            {data?.data_mode === "fixtures" && !busy && (
+            {data?.data_mode === "fixtures" && (
               <p className="mx-4 mb-0 mt-6 text-xs text-muted md:mx-0">
                 Development mode: these are recorded responses from the stores, not a live search.
               </p>

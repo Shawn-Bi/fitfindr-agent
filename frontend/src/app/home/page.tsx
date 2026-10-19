@@ -75,7 +75,7 @@ function Home() {
         <div className="px-4 pb-1 md:hidden">
           <FilterBar
             value={filters}
-            onApply={(f) => {
+            onChange={(f) => {
               setFilters(f);
               setTouched(true);
             }}
@@ -90,7 +90,7 @@ function Home() {
           </div>
           <FilterBar
             value={filters}
-            onApply={(f) => {
+            onChange={(f) => {
               setFilters(f);
               setTouched(true);
             }}

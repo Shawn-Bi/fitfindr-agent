@@ -2,12 +2,13 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { activeCount, EMPTY_FILTERS } from "@/lib/filters";
-import { COLOR_SWATCHES, CONDITIONS, money, SIZE_OPTIONS, STORE_LABELS, US_STATES } from "@/lib/format";
+import { COLOR_SWATCHES, CONDITIONS, money, SIZE_OPTIONS, STORE_LABELS } from "@/lib/format";
 import type { FilterKey, FilterSupport, Platform, SearchFilters } from "@/lib/types";
-import { Swatch, ToggleChip, toggle } from "./Chips";
+import { SizeChip, SizeRow, Swatch, ToggleChip, toggle } from "./Chips";
 
-const LIVE_STORES: Platform[] = ["ebay", "depop", "poshmark", "mercari"];
-const SOON_STORES: Platform[] = ["etsy", "fb_marketplace"];
+const LIVE_STORES: Platform[] = ["ebay", "etsy", "depop", "poshmark", "mercari"];
+const SOON_STORES: Platform[] = ["fb_marketplace"];
+const DEFAULT_LOCATION = "New York, NY";
 const WITHIN = [
   { value: 1, label: "24 h" },
   { value: 7, label: "7 days" },
@@ -17,12 +18,12 @@ const WITHIN = [
 // Used when the API hasn't said yet (Home, before any search). Same as backend FILTER_SUPPORT.
 export const DEFAULT_SUPPORT: FilterSupport = {
   price: { available: true },
-  size: { available: true, note: "eBay listings don't state a size." },
+  size: { available: true, note: "eBay and Etsy listings don't state a size; they stay in, after the matches." },
   condition: { available: true, note: "Matched on the condition each store states." },
   colour: { available: true, note: "Matched on colours named in the listing title." },
   gender: { available: true, note: "Matched on Men's / Women's in the title." },
   listed_within: { available: true, note: "Only Poshmark shares listing dates; other stores' items are hidden while this is on." },
-  location: { available: false, note: "Not available for these stores." },
+  location: { available: false, note: "Location is for Facebook Marketplace, which isn't connected yet." },
   store: { available: true },
 };
 
@@ -60,30 +61,85 @@ function summary(key: FilterKey, f: SearchFilters): string | null {
       return WITHIN.find((w) => w.value === f.within_days)?.label || null;
     case "store":
       return f.stores.length === 1 ? STORE_LABELS[f.stores[0]] : f.stores.length ? `${f.stores.length} stores` : null;
+    case "location":
+      return f.location;
     default:
       return null;
   }
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function SizeGroup({ label, options, value, onToggle }: {
+  label: string;
+  options: string[];
+  value: string[];
+  onToggle: (v: string) => void;
+}) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <div className="text-xs font-bold text-muted">{label}</div>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+      <SizeRow count={options.length}>
+        {options.map((s) => (
+          <SizeChip key={s} pressed={value.includes(s)} onClick={() => onToggle(s)}>
+            {s}
+          </SizeChip>
+        ))}
+      </SizeRow>
     </div>
   );
 }
 
-/** The editor for one filter, used in both the desktop popover and the phone sheet. */
+const FILTER_SIZES = {
+  letter: [...SIZE_OPTIONS.letter, ...SIZE_OPTIONS.plusLetter],
+  numeric: SIZE_OPTIONS.numeric,
+  waist: [...SIZE_OPTIONS.waist, ...SIZE_OPTIONS.menWaist.filter((w) => Number(w) > 34)],
+  shoes: [...new Set([...SIZE_OPTIONS.shoes, ...SIZE_OPTIONS.menShoes])].sort((a, b) => Number(a) - Number(b)),
+};
+
+/** Number input that reports a value once typing pauses, so each keystroke isn't a search. */
+function PriceField({ label, value, onCommit }: { label: string; value: number | null; onCommit: (v: number | null) => void }) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => setText(value == null ? "" : String(value)), [value]);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
+      {label}
+      <span className="flex h-11 items-center gap-1 rounded-xl border-[1.5px] border-line bg-surface px-3 focus-within:border-primary">
+        <span aria-hidden="true">$</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          value={text}
+          onChange={(e) => {
+            const next = e.target.value;
+            setText(next);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => {
+              const n = Number(next);
+              if (next === "") onCommit(null);
+              else if (Number.isFinite(n) && n >= 0) onCommit(n);
+            }, 600);
+          }}
+          className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-ink outline-none"
+        />
+      </span>
+    </label>
+  );
+}
+
+/** The editor for one filter, used in both the desktop popover and the phone sheet. Every change applies at once. */
 function Section({
   k,
-  draft,
-  setDraft,
+  value: draft,
+  onChange: setDraft,
   support,
 }: {
   k: FilterKey;
-  draft: SearchFilters;
-  setDraft: (f: SearchFilters) => void;
+  value: SearchFilters;
+  onChange: (f: SearchFilters) => void;
   support: FilterSupport;
 }) {
   const id = useId();
@@ -93,59 +149,19 @@ function Section({
   let body: React.ReactNode = null;
 
   if (k === "price") {
-    const field = (which: "min_price" | "max_price", label: string) => (
-      <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted">
-        {label}
-        <span className="flex h-11 items-center gap-1 rounded-xl border-[1.5px] border-line bg-surface px-3 focus-within:border-primary">
-          <span aria-hidden="true">$</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            value={draft[which] ?? ""}
-            onChange={(e) => setDraft({ ...draft, [which]: e.target.value === "" ? null : Number(e.target.value) })}
-            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-ink outline-none"
-          />
-        </span>
-      </label>
-    );
     body = (
       <div className="flex gap-2">
-        {field("min_price", "Min")}
-        {field("max_price", "Max")}
+        <PriceField label="Min" value={draft.min_price} onCommit={(v) => setDraft({ ...draft, min_price: v })} />
+        <PriceField label="Max" value={draft.max_price} onCommit={(v) => setDraft({ ...draft, max_price: v })} />
       </div>
     );
   } else if (k === "size") {
     body = (
       <div className="flex flex-col gap-3">
-        <Group label="Letter">
-          {SIZE_OPTIONS.letter.map((s) => (
-            <ToggleChip key={s} size="sm" pressed={sizes.includes(s)} onClick={() => setSizes(s)}>
-              {s}
-            </ToggleChip>
-          ))}
-        </Group>
-        <Group label="Numeric (tops, dresses)">
-          {SIZE_OPTIONS.numeric.map((s) => (
-            <ToggleChip key={s} size="sm" pressed={sizes.includes(s)} onClick={() => setSizes(s)}>
-              {s}
-            </ToggleChip>
-          ))}
-        </Group>
-        <Group label="Waist (bottoms)">
-          {SIZE_OPTIONS.waist.map((s) => (
-            <ToggleChip key={s} size="sm" pressed={sizes.includes(s)} onClick={() => setSizes(s)}>
-              {s}
-            </ToggleChip>
-          ))}
-        </Group>
-        <Group label="Shoes (US)">
-          {SIZE_OPTIONS.shoes.map((s) => (
-            <ToggleChip key={s} size="sm" pressed={sizes.includes(s)} onClick={() => setSizes(s)}>
-              {s}
-            </ToggleChip>
-          ))}
-        </Group>
+        <SizeGroup label="Letter" options={FILTER_SIZES.letter} value={sizes} onToggle={setSizes} />
+        <SizeGroup label="Numeric (tops, dresses)" options={FILTER_SIZES.numeric} value={sizes} onToggle={setSizes} />
+        <SizeGroup label="Waist (bottoms)" options={FILTER_SIZES.waist} value={sizes} onToggle={setSizes} />
+        <SizeGroup label="Shoes (US)" options={FILTER_SIZES.shoes} value={sizes} onToggle={setSizes} />
       </div>
     );
   } else if (k === "condition") {
@@ -209,18 +225,20 @@ function Section({
       </div>
     );
   } else if (k === "location") {
+    const enabled = support.location?.available !== false;
     body = (
-      <select
-        id={id}
-        disabled
-        aria-describedby={`${id}-note`}
-        className="h-11 w-full rounded-xl border-[1.5px] border-line-soft bg-bg px-3 text-[15px] text-muted"
-      >
-        <option>Any US state</option>
-        {US_STATES.map((s) => (
-          <option key={s}>{s}</option>
-        ))}
-      </select>
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        US ZIP or city · FB Marketplace only
+        <input
+          id={id}
+          disabled={!enabled}
+          aria-describedby={`${id}-note`}
+          defaultValue={draft.location || DEFAULT_LOCATION}
+          maxLength={80}
+          onBlur={(e) => enabled && setDraft({ ...draft, location: e.target.value.trim() || null })}
+          className="h-11 w-full rounded-xl border-[1.5px] border-line bg-surface px-3 text-base text-ink outline-none focus:border-primary disabled:border-line-soft disabled:bg-bg disabled:text-muted"
+        />
+      </label>
     );
   } else if (k === "store") {
     body = (
@@ -232,7 +250,7 @@ function Section({
         ))}
         {SOON_STORES.map((p) => (
           <ToggleChip key={p} pressed={false} disabled onClick={() => undefined}>
-            {STORE_LABELS[p]} · soon
+            {STORE_LABELS[p]} · coming soon
           </ToggleChip>
         ))}
       </div>
@@ -266,35 +284,41 @@ function clearOne(k: FilterKey, f: SearchFilters): SearchFilters {
       return { ...f, within_days: null };
     case "store":
       return { ...f, stores: [] };
+    case "location":
+      return { ...f, location: null };
     default:
       return f;
   }
 }
 
 /**
- * Search filters (B4). Desktop: a row of dropdown chips, each with Apply.
- * Phone: a "Filters" button that opens a bottom sheet. Filters whose field
- * the stores don't send stay visible but disabled, with the reason.
+ * Search filters (B4). Every choice applies at once: the results page updates
+ * the URL and searches again without a model call. Desktop: a row of dropdown
+ * chips. Phone: a "Filters" button that opens a bottom sheet whose button
+ * shows the live result count. Filters whose field the stores don't send
+ * stay visible but disabled, with the reason.
  */
 export function FilterBar({
   value,
   support = DEFAULT_SUPPORT,
-  onApply,
+  onChange,
   fromProfile = false,
+  resultCount = null,
+  busy = false,
 }: {
   value: SearchFilters;
   support?: FilterSupport;
-  onApply: (f: SearchFilters) => void;
+  onChange: (f: SearchFilters) => void;
   fromProfile?: boolean;
+  /** Results for the current filters (null before the first search). */
+  resultCount?: number | null;
+  busy?: boolean;
 }) {
   const [open, setOpen] = useState<FilterKey | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [draft, setDraft] = useState<SearchFilters>(value);
   const rowRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const count = activeCount(value);
-
-  useEffect(() => setDraft(value), [value]);
 
   useEffect(() => {
     if (!open && !sheet) return;
@@ -319,11 +343,7 @@ export function FilterBar({
     if (sheet) sheetRef.current?.focus();
   }, [sheet]);
 
-  function apply(next: SearchFilters) {
-    setOpen(null);
-    setSheet(false);
-    onApply(next);
-  }
+  const showLabel = busy || resultCount == null ? "Show results" : `Show ${resultCount} result${resultCount === 1 ? "" : "s"}`;
 
   return (
     <div className="min-w-0">
@@ -331,10 +351,7 @@ export function FilterBar({
       <div className="flex items-center gap-2 md:hidden">
         <button
           type="button"
-          onClick={() => {
-            setDraft(value);
-            setSheet(true);
-          }}
+          onClick={() => setSheet(true)}
           aria-haspopup="dialog"
           className="flex h-11 items-center gap-2 rounded-full border-[1.5px] border-ink bg-surface px-4 text-sm font-bold"
         >
@@ -355,7 +372,7 @@ export function FilterBar({
       <div ref={rowRef} className="relative hidden flex-wrap items-center gap-1.5 md:flex" role="group" aria-label="Filters">
         {ORDER.map(({ key, label }) => {
           const available = support[key]?.available !== false;
-          const shown = summary(key, value);
+          const shown = available ? summary(key, value) : null;
           const isOpen = open === key;
           return (
             <div key={key} className="relative">
@@ -365,10 +382,7 @@ export function FilterBar({
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
                 title={!available ? support[key]?.note : undefined}
-                onClick={() => {
-                  setDraft(value);
-                  setOpen(isOpen ? null : key);
-                }}
+                onClick={() => setOpen(isOpen ? null : key)}
                 className={`flex h-10 items-center gap-1 rounded-full border-[1.5px] px-3 text-[13px] ${
                   shown ? "border-ink bg-ink font-bold text-white" : "border-line bg-surface text-ink hover:border-ink"
                 } disabled:cursor-not-allowed disabled:border-dashed disabled:border-line disabled:bg-bg disabled:text-muted`}
@@ -380,24 +394,29 @@ export function FilterBar({
                 <div
                   role="dialog"
                   aria-label={`${label} filter`}
-                  className="absolute left-0 top-12 z-30 flex w-[340px] flex-col gap-3 rounded-2xl border border-line-blue bg-surface p-4 shadow-lg"
+                  className="absolute left-0 top-12 z-30 flex w-[360px] flex-col gap-3 rounded-2xl border border-line-blue bg-surface p-4 shadow-lg"
                 >
-                  <div className="text-sm font-bold">{label}</div>
-                  <Section k={key} draft={draft} setDraft={setDraft} support={support} />
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-bold">{label}</div>
+                    <div className="text-xs text-muted" aria-live="polite">
+                      {busy ? "Updating…" : resultCount != null ? `${resultCount} result${resultCount === 1 ? "" : "s"}` : ""}
+                    </div>
+                  </div>
+                  <Section k={key} value={value} onChange={onChange} support={support} />
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => apply(clearOne(key, value))}
+                      onClick={() => onChange(clearOne(key, value))}
                       className="h-10 rounded-xl px-3 text-sm font-bold text-ink hover:bg-bg"
                     >
                       Clear
                     </button>
                     <button
                       type="button"
-                      onClick={() => apply(draft)}
+                      onClick={() => setOpen(null)}
                       className="h-10 rounded-xl bg-primary px-4 text-sm font-bold text-white hover:bg-primary-hover"
                     >
-                      Apply
+                      Done
                     </button>
                   </div>
                 </div>
@@ -405,9 +424,6 @@ export function FilterBar({
             </div>
           );
         })}
-        {!support.location.available && (
-          <span className="text-xs text-muted">Location: {support.location.note}</span>
-        )}
         {fromProfile && <span className="text-xs text-muted">Pre-filled from your profile</span>}
       </div>
 
@@ -437,26 +453,27 @@ export function FilterBar({
             </div>
             <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
               {ORDER.map(({ key, label }) => (
-                <section key={key} className="flex flex-col gap-2" aria-label={label}>
+                <section key={key} className="flex min-w-0 flex-col gap-2" aria-label={label}>
                   <h3 className={`m-0 text-sm font-bold ${support[key]?.available === false ? "text-muted" : ""}`}>{label}</h3>
-                  <Section k={key} draft={draft} setDraft={setDraft} support={support} />
+                  <Section k={key} value={value} onChange={onChange} support={support} />
                 </section>
               ))}
             </div>
             <div className="flex gap-2 border-t border-line-soft p-4">
               <button
                 type="button"
-                onClick={() => setDraft({ ...EMPTY_FILTERS, sizes: [], gender: "any" })}
+                onClick={() => onChange({ ...EMPTY_FILTERS, sizes: [], gender: "any" })}
                 className="h-12 flex-1 rounded-xl border-[1.5px] border-ink bg-surface font-bold"
               >
                 Clear all
               </button>
               <button
                 type="button"
-                onClick={() => apply(draft)}
+                onClick={() => setSheet(false)}
+                aria-live="polite"
                 className="h-12 flex-[2] rounded-xl bg-primary font-bold text-white hover:bg-primary-hover"
               >
-                Show results
+                {showLabel}
               </button>
             </div>
           </div>

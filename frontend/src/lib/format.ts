@@ -106,16 +106,32 @@ export const CONDITIONS = [
 const range = (from: number, to: number, step = 1) =>
   Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => String(from + i * step));
 
-/** US size options per profile category (B3). */
+const halves = (from: number, to: number) => range(from * 2, to * 2).map((n) => String(Number(n) / 2));
+
+/**
+ * US retail size options (Nordstrom / Madewell / J.Crew), per "Shopping for".
+ * Values are stored as shown; backend api/catalog.py maps them into search.
+ */
 export const SIZE_OPTIONS = {
+  // Women
   letter: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
-  numeric: range(0, 20, 2),
-  waist: range(24, 40),
-  inseam: range(28, 34),
-  bottomsLetter: ["XS", "S", "M", "L", "XL"],
-  dresses: [...range(0, 20, 2), "XS", "S", "M", "L", "XL"],
-  shoes: range(5, 13, 0.5),
+  numeric: ["00", ...range(0, 20, 2)],
+  plusLetter: ["1X", "2X", "3X", "4X"],
+  plusNumeric: range(14, 28, 2).map((n) => `${n}W`),
+  waist: range(23, 34),
+  inseam: ["Short", "Regular", "Long"],
+  shoes: halves(5, 12),
+  // Men
+  menTops: ["S", "M", "L", "XL", "XXL"],
+  menNeck: halves(14, 18),
+  menSleeve: range(32, 36),
+  menWaist: [...range(28, 36), ...range(38, 44, 2)],
+  menInseam: range(28, 36),
+  menShoes: [...halves(7, 13), "14", "15"],
 };
+
+/** Inseam bands, for the size guide and the Size filter. */
+export const INSEAM_HINT: Record<string, string> = { Short: "28–29 in", Regular: "30–32 in", Long: "33–34 in" };
 
 export const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
