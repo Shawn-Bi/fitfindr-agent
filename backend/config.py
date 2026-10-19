@@ -9,6 +9,7 @@ either the cache handed back an answer it already had, or TEMPERATURE is 0.
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +43,11 @@ def redact(text) -> str:
         if len(value) >= 8:
             text = text.replace(value, f"[REDACTED {name}]")
     return text
+
+
+# The dashboard shows the REST endpoint (…supabase.co/rest/v1/); clients want the
+# bare project URL, so accept either.
+SUPABASE_URL = re.sub(r"/(rest/v1)?/*$", "", os.getenv("SUPABASE_URL", "").strip())
 
 
 if DATA_MODE not in ("fixtures", "live"):
