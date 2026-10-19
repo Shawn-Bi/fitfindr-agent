@@ -1,9 +1,9 @@
 """
-Adapter for Depop, Poshmark and Mercari (Fashion Resale API) via RapidAPI host $RESALE_API_HOST.
+Adapter for Depop, Poshmark, Mercari and eBay (Fashion Resale API) via RapidAPI host $RESALE_API_HOST.
 
 Job: turn one search query into a list of FitFindr standard listing dicts
 (see normalize.py): id, title, price (float, USD), size, platform, url,
-image_url, plus optional condition, updated_at. Missing values are None.
+image_url, plus optional condition, updated_at, category. Missing values are None.
 
     search(query)     → live call (counted by quota.py), returns list[dict]
     fetch_raw(query)  → the raw JSON response (used to record fixtures)
@@ -12,10 +12,17 @@ image_url, plus optional condition, updated_at. Missing values are None.
 Endpoint: GET https://$RESALE_API_HOST/search
     q, platforms (comma list), per_page, page,
     optional size, min_price, max_price, condition, brand, sort, order.
-The API also covers Grailed; FitFindr only asks for the three stores below.
+    sort accepts only "price" or "relevance" (the default).
+The API also covers Grailed; FitFindr only asks for the four stores below.
+
+Why sort=price: with the default relevance sort the API returns results grouped
+by store, so a page holds one store only. Price sort interleaves stores, so one
+call (not one per store) gives a mixed pool; tools.search_listings then ranks
+by keyword match and alternates stores within each match tier. Recorded proof:
+tests/fixtures/resale_vintage_graphic_tee__*.json (2026-10-19).
 
 Fixtures for this adapter live in tests/fixtures/resale_<query>.json.
-Priority: wire this one first. One call covers three stores.
+Priority: wire this one first. One call covers four stores.
 """
 
 import json
@@ -29,7 +36,7 @@ from sources import quota
 from sources.normalize import from_resale
 
 SOURCE = "RESALE_API_HOST"                 # env var holding the RapidAPI host; quota key
-PLATFORMS = ("depop", "poshmark", "mercari")
+PLATFORMS = ("depop", "poshmark", "mercari", "ebay")
 FIXTURE_PREFIX = "resale"
 TIMEOUT_SECONDS = 20
 
@@ -58,7 +65,8 @@ def fetch_raw(query: str, per_page: int = 20, page: int = 1, **filters) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         status = exc.code
-        raise RuntimeError(config.redact(f"Fashion Resale API returned HTTP {exc.code}")) from None
+        body = exc.read()[:300].decode("utf-8", "replace")
+        raise RuntimeError(config.redact(f"Fashion Resale API returned HTTP {exc.code}: {body}")) from None
     finally:
         quota.record(SOURCE, status)
 
@@ -72,6 +80,6 @@ def parse(raw) -> list[dict]:
     return [listing for listing in listings if listing]
 
 
-def search(query: str) -> list[dict]:
-    """Live search across Depop, Poshmark and Mercari. Returns [] when nothing matches."""
-    return parse(fetch_raw(query))
+def search(query: str, max_price: float | None = None) -> list[dict]:
+    """Live search across Depop, Poshmark, Mercari and eBay. Returns [] when nothing matches."""
+    return parse(fetch_raw(query, per_page=60, sort="price", order="asc", max_price=max_price))

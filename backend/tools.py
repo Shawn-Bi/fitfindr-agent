@@ -27,6 +27,51 @@ from generate import generate
 from sources import fetch_candidates
 
 
+# ── Search helpers ────────────────────────────────────────────────────────────
+
+# Kids' items are dropped unless the query asks for them. The store category is
+# the reliable signal ("Girls bottoms"); titles only count on unambiguous
+# markers, so "Spice Girls tee" or "Kid Cudi tee" stay in.
+_KIDS_QUERY = re.compile(
+    r"\b(kids?|child(ren)?|girls?|boys?|toddlers?|bab(y|ies)|infants?|youth|"
+    r"newborn|\d{1,2}T)\b", re.I)
+_KIDS_CATEGORY = re.compile(
+    r"\b(girls?|boys?|kids?|child(ren)?|toddlers?|bab(y|ies)|infants?|youth)\b", re.I)
+_KIDS_TITLE = re.compile(
+    r"\b(kids|kid['’]s|children['’]?s?|toddlers?|bab(y|ies)|infants?|youth|newborn)\b"
+    r"|\b(girl|boy)['’]s\b|\b(girls|boys)['’]"
+    r"|\b\d{1,2}T\b|\b\d{1,2}\s?(mos|months)\b", re.I)
+
+
+def wants_kids(query: str) -> bool:
+    return bool(_KIDS_QUERY.search(query or ""))
+
+
+def is_kids_item(item: dict) -> bool:
+    return bool(_KIDS_CATEGORY.search(item.get("category") or "")
+                or _KIDS_TITLE.search(item.get("title") or ""))
+
+
+def _mix_stores(ranked: list[tuple[int, dict]]) -> list[dict]:
+    """
+    Keep keyword-match order, but within each tier of equal score alternate
+    stores (round-robin), so one cheap store can't fill the whole page.
+    The top item overall stays first.
+    """
+    mixed = []
+    for score in sorted({s for s, _ in ranked}, reverse=True):
+        buckets: dict[str, list[dict]] = {}
+        for s, item in ranked:
+            if s == score:
+                buckets.setdefault(item["platform"], []).append(item)
+        while buckets:
+            for platform in list(buckets):
+                mixed.append(buckets[platform].pop(0))
+                if not buckets[platform]:
+                    del buckets[platform]
+    return mixed
+
+
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
 
 def search_listings(
@@ -70,10 +115,11 @@ def search_listings(
     How it works:
         1. Get candidates from every source with sources.fetch_candidates().
         2. Drop duplicates; filter by max_price and by size, when provided.
+           Drop kids' items unless the description asks for kids.
         3. Score what's left by keyword overlap with `description`.
         4. Drop anything scoring zero.
-        5. Sort by score, highest first, and return the listing dicts —
-           at most config.SEARCH_RESULT_LIMIT of them.
+        5. Sort by score, highest first, alternating stores within equal
+           scores, and return at most config.SEARCH_RESULT_LIMIT listings.
 
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
@@ -82,7 +128,8 @@ def search_listings(
         return [t for t in re.split(r"[\s/(),]+", str(text or "").lower()) if t]
 
     words = [w for w in tokens(description) if len(w) > 2]
-    candidates, _statuses = fetch_candidates(description)
+    candidates, _statuses = fetch_candidates(description, max_price=max_price)
+    allow_kids = wants_kids(description)
 
     seen, results = set(), []
     for item in candidates:
@@ -94,12 +141,13 @@ def search_listings(
             continue
         if size and size.lower() not in tokens(item["size"]):
             continue
+        if not allow_kids and is_kids_item(item):
+            continue
         text = " ".join(filter(None, [item["title"], item.get("condition")])).lower()
         score = sum(1 for w in words if w in text)
         if score > 0:
             results.append((score, item))
-    results.sort(key=lambda pair: pair[0], reverse=True)
-    return [item for score, item in results[:config.SEARCH_RESULT_LIMIT]]
+    return _mix_stores(results)[:config.SEARCH_RESULT_LIMIT]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -153,6 +201,19 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
 
+# The user is the buyer. A caption that sounds like the seller ("I just listed
+# these…") is wrong; run_eval.py flags any card that matches this.
+SELLER_VOICE = re.compile(
+    r"\b(i\s+(just\s+)?listed|just\s+listed|(i['’]?m|i am|now)\s+selling|"
+    r"selling\s+(these|this|it|them)|for sale|my\s+(shop|store|listing|closet sale)|"
+    r"shop my|available (now )?(in|at) my|dm (me )?to (buy|purchase)|up for grabs)\b", re.I)
+
+
+def seller_voice(text: str) -> list[str]:
+    """Seller-sounding phrases found in a caption ([] means it reads as the buyer)."""
+    return [m.group(0) for m in SELLER_VOICE.finditer(text or "")]
+
+
 def create_fit_card(outfit: str, new_item: dict) -> str:
     """
     Write a short caption someone would actually post about the find.
@@ -170,7 +231,8 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
 
     The caption should read like a real post rather than a product description,
     mention the item and its price and platform once each, and be specific about
-    the vibe.
+    the vibe. It is written by the BUYER who found the piece ("found", "scored",
+    "just bought"), never the seller ("listed", "selling", "my shop").
 
     It should also come out **differently for different inputs**. If you run
     this three times on the same item and get three word-for-word identical
@@ -193,6 +255,10 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     prompt = (f"Write a 2-4 sentence social media caption about this thrift find.\n"
               f"Item: {new_item['title']}\nPrice: ${new_item['price']:.0f}\n"
               f"Platform: {new_item['platform']}\nOutfit idea: {outfit}\n"
+              "You are the shopper who just found and bought this secondhand piece "
+              "and are showing off the outfit. Write as the buyer: use words like "
+              "'found', 'scored', 'snagged' or 'just bought'. You are NOT the seller: "
+              "never say you listed it, are selling it, or mention your shop or store. "
               "Sound like a real person posting, not a product description. "
               "Use the item's exact title, word for word, once. "
               "Mention the price and platform once each, and be specific about the vibe.")

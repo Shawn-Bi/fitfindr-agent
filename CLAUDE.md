@@ -28,7 +28,7 @@ FitFindr-Agent/        # the project folder, GitHub repo fitfindr-agent (private
   backend/
     agent.py, tools.py, mcp_server.py, mcp_client.py, config.py, trace.py
     sources/            # one adapter per RapidAPI host
-      resale.py  etsy.py  ebay.py  fb_marketplace.py  normalize.py  quota.py
+      resale.py  etsy.py  fb_marketplace.py  normalize.py  quota.py   # resale = Depop, Poshmark, Mercari, eBay
     api/main.py         # FastAPI routes from PRD section 7
     run_eval.py, scenarios.py, criteria.md
     tests/fixtures/     # recorded real API responses, dev/test only
@@ -53,19 +53,23 @@ FitFindr-Agent/        # the project folder, GitHub repo fitfindr-agent (private
 
 | Store(s) | Env var for host | Monthly quota | Stop at |
 |---|---|---|---|
-| Depop, Poshmark, Mercari | `RESALE_API_HOST` | 50 | 40 |
+| Depop, Poshmark, Mercari, eBay | `RESALE_API_HOST` | 50 | 40 |
 | Etsy | `ETSY_API_HOST` | 50 | 40 |
 | Facebook Marketplace | `FB_MARKETPLACE_HOST` | 50 (hard) | 40 |
-| eBay | `EBAY_API_HOST` | 20 (soft) | 15 |
+
+   eBay comes through the Fashion Resale API (`platforms=...,ebay`); there is no
+   separate eBay host or quota. Call it with `sort=price` (only `price` and
+   `relevance` exist; `relevance` returns one store per page).
 
 5. At the stop line, that store is **paused**: serve its ≤ 24 h cache if one exists,
    otherwise skip it and tell the UI `{"platform": "ebay", "status": "paused",
    "resumes": "2026-11-01"}`. Never fill the gap with fixtures in production.
-6. Live-call priority: Fashion Resale API first (3 stores per call). Wire up eBay, Etsy
+6. Live-call priority: Fashion Resale API first (4 stores per call). Wire up Etsy
    and FB Marketplace last, in one integration pass.
 7. Every adapter returns the FitFindr standard listing dict:
    `id, title, price (float, USD), size, platform, url, image_url` plus optional
-   `condition, updated_at`. Missing values are `None`, never invented.
+   `condition, updated_at, category` (the store's own category label, used to
+   filter out kids' items). Missing values are `None`, never invented.
    `search_listings()` keeps its old signature and still returns `[]` when nothing
    matches; it stays registered in `mcp_server.py`.
 
@@ -73,7 +77,7 @@ FitFindr-Agent/        # the project folder, GitHub repo fitfindr-agent (private
 
 - Keys live only in `.env` (git-ignored). `.env.example` lists names with empty values.
 - Never print a key, put one in code, a commit, a log line or a screenshot.
-- Env vars: `GEMINI_API_KEY`, `RAPIDAPI_KEY`, `EBAY_API_HOST`, `ETSY_API_HOST`,
+- Env vars: `GEMINI_API_KEY`, `RAPIDAPI_KEY`, `ETSY_API_HOST`,
   `RESALE_API_HOST`, `FB_MARKETPLACE_HOST`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `FITFINDR_DATA_MODE`, `APP_ENV`.
 

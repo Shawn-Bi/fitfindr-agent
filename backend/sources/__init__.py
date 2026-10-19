@@ -15,12 +15,13 @@ import json
 import logging
 
 import config
-from sources import ebay, etsy, fb_marketplace, quota, resale
+from sources import etsy, fb_marketplace, quota, resale
 
 log = logging.getLogger("fitfindr.sources")
 
-# Live-call priority: Fashion Resale first; the other three in one later pass.
-ADAPTERS = (resale, etsy, ebay, fb_marketplace)
+# Live-call priority: Fashion Resale first (Depop, Poshmark, Mercari, eBay);
+# Etsy and FB Marketplace in one later pass.
+ADAPTERS = (resale, etsy, fb_marketplace)
 
 
 def _from_fixtures(adapter) -> list[dict]:
@@ -31,7 +32,7 @@ def _from_fixtures(adapter) -> list[dict]:
     return listings
 
 
-def fetch_candidates(query: str) -> tuple[list[dict], list[dict]]:
+def fetch_candidates(query: str, max_price: float | None = None) -> tuple[list[dict], list[dict]]:
     """
     Returns (listings, statuses). statuses has one entry per platform, e.g.
     {"platform": "ebay", "status": "paused", "resumes": "2026-11-01"}.
@@ -43,7 +44,7 @@ def fetch_candidates(query: str) -> tuple[list[dict], list[dict]]:
             statuses += [{"platform": p, "status": "fixtures"} for p in adapter.PLATFORMS]
             continue
         try:
-            listings.extend(adapter.search(query))
+            listings.extend(adapter.search(query, max_price=max_price))
             statuses += [quota.status(adapter.SOURCE, p) for p in adapter.PLATFORMS]
         except quota.QuotaPaused as paused:
             # TODO: serve this store's ≤ 24 h search_cache entry when one exists.

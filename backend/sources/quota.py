@@ -28,10 +28,9 @@ log = logging.getLogger("fitfindr.live_calls")
 
 # env var naming the host → (monthly quota, stop line)
 LIMITS = {
-    "RESALE_API_HOST":     (50, 40),   # Depop, Poshmark, Mercari
+    "RESALE_API_HOST":     (50, 40),   # Depop, Poshmark, Mercari, eBay
     "ETSY_API_HOST":       (50, 40),
     "FB_MARKETPLACE_HOST": (50, 40),   # hard limit
-    "EBAY_API_HOST":       (20, 15),   # soft limit
 }
 
 _lock = threading.Lock()

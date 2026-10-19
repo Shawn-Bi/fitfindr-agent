@@ -136,16 +136,17 @@ MVP 只做“买”这一条线：搜索二手单品、管理自己的衣橱、�
 
 | 平台 | RapidAPI Host | 免费额度 | 本地熔断线 |
 | --- | --- | --- | --- |
-| Depop · Poshmark · Mercari | fashion-resale-api.p.rapidapi.com | 50 次/月 | 40 |
+| Depop · Poshmark · Mercari · eBay | fashion-resale-api.p.rapidapi.com | 50 次/月 | 40 |
 | Etsy | etsy-api2.p.rapidapi.com | 50 次/月 | 40 |
 | Facebook Marketplace | facebook-marketplace-api.p.rapidapi.com | 50 次/月（硬上限） | 40 |
-| eBay | real-time-ebay-data.p.rapidapi.com | 20 次/月（软上限） | 15 |
+
+eBay 通过 Fashion Resale API 获取（platforms 参数里加 ebay），不再单独订阅 eBay 接口，也没有单独的 eBay 额度（2026-10-19 实测确认）。
 
 - **统一格式**：每个平台一个 adapter，把返回清洗成 FitFindr 标准字典 id、title、price、size、platform、url、image\_url（可选 condition、updated\_at）；search\_listings 负责合并、去重、排序。
-- **调用优先级**：先调 Fashion Resale API（一次覆盖 3 个平台）；eBay、Etsy、FB Marketplace 放到最后统一联调。
+- **调用优先级**：先调 Fashion Resale API（一次覆盖 Depop、Poshmark、Mercari、eBay 4 个平台，按价格排序以混合各平台结果）；Etsy、FB Marketplace 放到最后统一联调。
 - **开发期用录制数据**：每个接口只真实调用 1–2 次，把原始 JSON 存到 tests/fixtures/；单元测试、Prompt 调试、UI 联调都读这些文件。fixtures 只在开发和测试代码里使用，生产环境不加载。
 - **计数与熔断**：每个 host 一个月度计数器（存数据库，每月 1 日清零）。到熔断线后该平台暂停请求：有 24 小时内的真实缓存就用缓存，没有就跳过该平台，并在结果页显示 “eBay results are paused until Nov 1”。不用假数据填补。
-- **额度提醒**：4 个接口合计约 170 次/月，只够开发和小范围演示；有真实用户前要升级付费套餐。
+- **额度提醒**：3 个接口合计约 150 次/月，只够开发和小范围演示；有真实用户前要升级付费套餐。
 - **第三方接口**：这些是 RapidAPI 上的第三方接口，不是平台官方 API；遵守 RapidAPI 和提供方的条款，接口可能变动，需要监控失败率。
 - **不改接口形状**：search\_listings 的输入输出保持不变，继续通过 MCP 调用。
 - **用衣橱匹配**：结果排序加入衣橱信息（缺什么品类、常见颜色和风格）；尺码（US）和预算（USD）从档案自动带入，用户可删。
@@ -179,7 +180,7 @@ MVP 只做“买”这一条线：搜索二手单品、管理自己的衣橱、�
 
 接口：POST /search、GET/POST/PATCH/DELETE /closet/items、POST /closet/items/{id}/photo、GET /closet/items/{id}/matches、GET/POST/DELETE /saved、GET/PATCH /profile。
 
-网站开一个新的私有仓库 fitfindr-agent（本地 the project folder）：课程仓库是公开仓库的 fork，GitHub 不允许把它改成私有，产品代码不应公开。把 agent.py、tools.py、mcp\_server.py 等复制过去；每次大改后继续跑 run\_eval.py。环境变量：GEMINI\_API\_KEY、RAPIDAPI\_KEY、EBAY\_API\_HOST、ETSY\_API\_HOST、RESALE\_API\_HOST、FB\_MARKETPLACE\_HOST、SUPABASE\_URL、SUPABASE\_ANON\_KEY、SUPABASE\_SERVICE\_ROLE\_KEY。
+网站开一个新的私有仓库 fitfindr-agent（本地 the project folder）：课程仓库是公开仓库的 fork，GitHub 不允许把它改成私有，产品代码不应公开。把 agent.py、tools.py、mcp\_server.py 等复制过去；每次大改后继续跑 run\_eval.py。环境变量：GEMINI\_API\_KEY、RAPIDAPI\_KEY、ETSY\_API\_HOST、RESALE\_API\_HOST、FB\_MARKETPLACE\_HOST、SUPABASE\_URL、SUPABASE\_ANON\_KEY、SUPABASE\_SERVICE\_ROLE\_KEY。
 
 ## 8. 验收标准
 
@@ -223,7 +224,7 @@ MVP 只做“买”这一条线：搜索二手单品、管理自己的衣橱、�
 | --- | --- | --- |
 | GitHub、Vercel、Render 账号 | 已有 | — |
 | Gemini API key | 已有（沿用作业的） | — |
-| RapidAPI key 和 4 个 host | 已有 | 你填进 .env |
+| RapidAPI key 和 3 个 host | 已有 | 你填进 .env |
 | 10 张衣服照片（wardrobe photos/） | 已有 | — |
 | Logo 和 favicon | 已有（价签 + FF 图形，logo.svg、favicon.svg） | — |
 | 新建私有仓库 fitfindr-agent 并复制 Agent 代码 | 待做 | Claude Code |

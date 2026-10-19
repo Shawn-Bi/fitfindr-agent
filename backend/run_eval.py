@@ -35,6 +35,7 @@ import traceback
 
 import config
 import scenarios as scenario_module
+from tools import seller_voice
 
 
 def run_once(scenario, use_trace=True):
@@ -106,7 +107,9 @@ def main():
                     print(f"  try {attempt}: stopped early — {str(session['error'])[:60]}")
                 else:
                     card = (session.get("fit_card") or "")
-                    print(f"  try {attempt}: completed — fit card {len(card)} chars")
+                    seller = seller_voice(card)
+                    voice = f"SELLER VOICE: {seller}" if seller else "buyer voice ok"
+                    print(f"  try {attempt}: completed — fit card {len(card)} chars, {voice}")
 
         rows.append({"scenario": scenario, "tries": tries})
         print()
@@ -153,6 +156,21 @@ def write_report(rows, args):
             else f"{scenario['name']} _(diagnostic — not one of your five)_"
         )
         lines.append(f"| {label_text} |  | {' | '.join([' '] * n)} |  |")
+
+    # Automatic check: every fit card must read as the buyer, not the seller.
+    cards = [(row["scenario"]["name"], i, (r["session"] or {}).get("fit_card"))
+             for row in rows for i, r in enumerate(row["tries"], 1)
+             if r["session"] and (r["session"] or {}).get("fit_card")]
+    bad = [(name, i, seller_voice(card)) for name, i, card in cards if seller_voice(card)]
+    lines += [
+        "",
+        "## Automatic check: buyer voice",
+        "",
+        f"Fit cards written as the buyer (no 'listed', 'selling', 'my shop'…): "
+        f"**{len(cards) - len(bad)} / {len(cards)}**"
+        + (" — PASS" if not bad else " — FAIL"),
+        "",
+    ] + [f"- {name}, try {i}: {phrases}" for name, i, phrases in bad]
 
     lines += [
         "",
@@ -207,6 +225,8 @@ def write_report(rows, args):
     import generate
 
     print(f"Wrote {path.relative_to(config.ROOT)}")
+    print(f"Buyer voice: {len(cards) - len(bad)}/{len(cards)} fit cards"
+          + (" — PASS" if not bad else f" — FAIL ({len(bad)} sound like the seller)"))
     print(generate.usage())
     print("\nCommit this file. It's the evidence the test actually happened.")
 

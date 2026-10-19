@@ -26,7 +26,7 @@ def parse(raw) -> list[dict]:
     raise NotImplementedError("fb_marketplace.parse: no recorded response yet")
 
 
-def search(query: str) -> list[dict]:
+def search(query: str, max_price: float | None = None) -> list[dict]:
     """
     Live search. Must: quota.check(SOURCE) first, send RAPIDAPI_KEY and the
     host from $FB_MARKETPLACE_HOST as headers, quota.record(SOURCE, status) after,
