@@ -10,8 +10,8 @@ live mode     → a ≤ 24 h search_cache copy if there is one, else the adapter
                 A paused store with no cache is skipped and reported in
                 `statuses`, never filled with fixtures.
 
-Adapters with ENABLED = False (Etsy, FB Marketplace until their integration
-pass) are reported as "coming_soon" in both modes.
+Adapters with ENABLED = False (FB Marketplace: host not subscribed yet) are
+reported as "coming_soon" in both modes.
 
 Filtering, scoring and dedupe happen in tools.search_listings.
 """
@@ -24,8 +24,8 @@ from sources import cache, etsy, fb_marketplace, quota, resale
 
 log = logging.getLogger("fitfindr.sources")
 
-# Live-call priority: Fashion Resale first (Depop, Poshmark, Mercari, eBay);
-# Etsy and FB Marketplace in one later pass.
+# Live-call priority: Fashion Resale first (Depop, Poshmark, Mercari, eBay),
+# then Etsy; FB Marketplace once its host is subscribed.
 ADAPTERS = (resale, etsy, fb_marketplace)
 
 
@@ -41,12 +41,21 @@ def _statuses(adapter, status: str, **extra) -> list[dict]:
     return [{"platform": p, "status": status, **extra} for p in adapter.PLATFORMS]
 
 
+def cache_key(adapter, query: str, max_price: float | None, min_price: float | None) -> str:
+    """Adapters that don't send the price range (Etsy) share one cached response across budgets."""
+    if getattr(adapter, "PRICE_IN_QUERY", True):
+        return cache.query_hash(query, max_price, min_price)
+    return cache.query_hash(query)
+
+
 def fetch_candidates(query: str, max_price: float | None = None,
-                     min_price: float | None = None) -> tuple[list[dict], list[dict]]:
+                     min_price: float | None = None, *,
+                     live: bool = True) -> tuple[list[dict], list[dict]]:
     """
     Returns (listings, statuses). statuses has one entry per platform, e.g.
     {"platform": "ebay", "status": "paused", "resumes": "2026-11-01"}.
-    status is one of: fixtures, active, cached, paused, coming_soon, error.
+    status is one of: fixtures, active, cached, paused, coming_soon, error,
+    skipped (live=False and nothing cached: no live call was allowed).
     """
     listings, statuses = [], []
     for adapter in ADAPTERS:
@@ -58,11 +67,14 @@ def fetch_candidates(query: str, max_price: float | None = None,
             statuses += _statuses(adapter, "fixtures")
             continue
 
-        key = cache.query_hash(query, max_price, min_price)
+        key = cache_key(adapter, query, max_price, min_price)
         raw = cache.get(key, adapter.FIXTURE_PREFIX)
         if raw is not None:
             listings.extend(adapter.parse(raw))
             statuses += _statuses(adapter, "cached")
+            continue
+        if not live or (config.LIVE_SOURCES and adapter.SOURCE not in config.LIVE_SOURCES):
+            statuses += _statuses(adapter, "skipped")
             continue
         try:
             raw = adapter.fetch(query, max_price=max_price, min_price=min_price)

@@ -26,7 +26,7 @@ from api.images import PhotoError, process_photo  # noqa: E402
 from api.main import app, search_limiter  # noqa: E402
 from api.ratelimit import RateLimiter  # noqa: E402
 from generate import ModelUnavailable  # noqa: E402
-from sources import quota, resale  # noqa: E402
+from sources import etsy, quota, resale  # noqa: E402
 from tools import _parse_outfit, size_matches  # noqa: E402
 
 OUTFIT = {"text": "Wear it with wide-leg khakis.", "item_ids": []}
@@ -62,7 +62,7 @@ class SearchRouteTest(unittest.TestCase):
         self.assertFalse(body["personalized"])
         self.assertEqual([c["key"] for c in body["chips"]], ["q", "price"])
         stores = {s["platform"]: s["status"] for s in body["stores"]}
-        self.assertEqual(stores["etsy"], "coming_soon")
+        self.assertEqual(stores["etsy"], "live")
         self.assertEqual(stores["fb_marketplace"], "coming_soon")
         self.assertEqual(stores["ebay"], "live")
         outfit.assert_called_once()
@@ -119,7 +119,7 @@ class SearchRouteTest(unittest.TestCase):
     def test_stores_endpoint(self):
         body = self.client.get("/stores").json()
         self.assertEqual(len(body["stores"]), 6)
-        self.assertEqual(sum(s["status"] == "live" for s in body["stores"]), 4)
+        self.assertEqual(sum(s["status"] == "live" for s in body["stores"]), 5)   # FB: not subscribed
 
 
 class PhotoTest(unittest.TestCase):
@@ -221,10 +221,20 @@ class LiveModeSourcesTest(unittest.TestCase):
         raw = {"listings": [], "search_metadata": {}}
         with mock.patch("sources.cache.get", return_value=None), \
              mock.patch("sources.cache.put") as put, \
-             mock.patch.object(resale, "fetch", return_value=raw) as fetch:
+             mock.patch.object(resale, "fetch", return_value=raw) as fetch, \
+             mock.patch.object(etsy, "fetch", return_value={"success": True, "data": {"results": []}}) as efetch:
             sources.fetch_candidates("flannel shirt", max_price=20)
         fetch.assert_called_once_with("flannel shirt", max_price=20, min_price=None)
-        put.assert_called_once()
+        efetch.assert_called_once_with("flannel shirt", max_price=20, min_price=None)
+        self.assertEqual(put.call_count, 2)       # one cached response per host
+
+    def test_etsy_cache_key_ignores_the_price_range(self):
+        self.assertEqual(sources.cache_key(etsy, "white jeans", 40, 10), sources.cache_key(etsy, "white jeans", None, None))
+        self.assertNotEqual(sources.cache_key(resale, "white jeans", 40, 10),
+                            sources.cache_key(resale, "white jeans", None, None))
+
+    def test_unit_tests_cannot_reach_rapidapi(self):
+        self.assertEqual(os.getenv("RAPIDAPI_KEY"), "")
 
 
 class CatalogTest(unittest.TestCase):

@@ -22,14 +22,14 @@ _CATEGORY_WORDS = (
     ("outerwear", r"jacket|coat|parka|blazer|windbreaker|anorak|puffer|vest|gilet|cardigan|fleece|"
                   r"overshirt|shacket|trench|peacoat|bomber"),
     ("shoes", r"shoes?|sneakers?|boots?|booties|heels|pumps|loafers?|sandals?|trainers?|clogs?|mules?|"
-              r"flats|oxfords?|slingbacks?"),
+              r"flats|oxfords?(?![\s-]+(?:shirts?|button|cloth))|slingbacks?"),
     ("bottoms", r"pants|jeans|trousers|shorts|skirts?|slacks|joggers|sweatpants|chinos|leggings|cargos?|corduroys?|"
                 r"culottes"),
     ("accessories", r"bags?|handbags?|purses?|clutch|totes?|crossbody|belts?|hats?|caps?|scarf|scarves|"
                     r"beanie|necklace|earrings|sunglasses|wallet"),
     ("tops", r"tees?|t-shirts?|tshirts?|shirts?|tops?|blouses?|tanks?|sweaters?|hoodies?|sweatshirts?|"
              r"crewnecks?|polos?|flannels?|jerseys?|camis?|henleys?|turtlenecks?|pullovers?|bodysuits?|"
-             r"knit top|jumper"),
+             r"knit top|jumper|mock[\s-]?necks?|button[\s-]?downs?|camisoles?"),
 )
 _CATEGORY_RES = [(c, re.compile(rf"\b({words})\b", re.I)) for c, words in _CATEGORY_WORDS]
 

@@ -8,6 +8,8 @@ Routes
     GET    /health
     GET    /stores                      store status bar (live / paused / coming soon)
     POST   /search                      guest or signed-in search → results, styling, fit card
+                                        (style=false: results only, for instant filters)
+    POST   /search/style                styling + fit card for one listing (after a style=false search)
     GET    /home                        "Picked for your closet" (no live calls)
     GET    /closet/items                POST /closet/items (multipart: data + photo)
     PATCH  /closet/items/{id}           DELETE /closet/items/{id}
@@ -43,6 +45,7 @@ import attributes
 import autotag
 import config
 import observe
+import previews
 import stylist
 import supa
 from agent import STYLING_UNAVAILABLE, run_agent
@@ -50,7 +53,9 @@ from api import catalog
 from api.images import PhotoError, process_photo
 from api.ratelimit import RateLimiter
 from sources import ADAPTERS, quota, recent_pool
-from tools import search_with_status
+from sources.fb_marketplace import DEFAULT_LOCATION
+from agent import is_vague
+from tools import create_fit_card_full, search_broadened, search_with_status, suggest_outfit
 
 log = logging.getLogger("fitfindr.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -68,6 +73,9 @@ app.add_middleware(
 )
 
 search_limiter = RateLimiter(config.SEARCHES_PER_MINUTE)
+# Filter changes re-search at once (no model calls), so they get more room.
+quick_limiter = RateLimiter(config.SEARCHES_PER_MINUTE * 4)
+style_limiter = RateLimiter(config.SEARCHES_PER_MINUTE)
 
 
 @app.exception_handler(RequestValidationError)
@@ -224,6 +232,10 @@ class SearchIn(BaseModel):
     gender: Literal["women", "men", "any"] | None = None
     within_days: Literal[1, 7, 30] | None = None
     stores: list[Platform] = Field(default=[], max_length=6)
+    location: str | None = Field(default=None, max_length=80)
+    # False: results only (no agent, no model calls) — the results page uses
+    # it when a filter changes, then asks /search/style for the best match.
+    style: bool = True
 
     @field_validator("sizes")
     @classmethod
@@ -244,10 +256,14 @@ def _relaxed_chips(chips: list[dict], parsed: dict, relaxed: dict) -> list[dict]
     return [{**c, "label": label, "from_profile": False} if c["key"] == "price" else c for c in chips]
 
 
+def _client_key(request: Request, user: User | None) -> str:
+    return f"user:{user.id}" if user else f"ip:{request.client.host if request.client else 'unknown'}"
+
+
 @app.post("/search")
 def search(body: SearchIn, request: Request, user: User | None = Depends(optional_user)):
-    key = f"user:{user.id}" if user else f"ip:{request.client.host if request.client else 'unknown'}"
-    allowed, retry = search_limiter.allow(key)
+    quick = not body.style and not is_vague(body.q)
+    allowed, retry = (quick_limiter if quick else search_limiter).allow(_client_key(request, user))
     if not allowed:
         raise HTTPException(429, f"That's a lot of searches. Try again in {retry} seconds.",
                             headers={"Retry-After": str(retry)})
@@ -271,15 +287,27 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     rank_info: dict = {}
 
     def direct_search(description, size, max_price):
-        results, statuses = search_with_status(
-            description, None, max_price, wardrobe=wardrobe, limit=config.WEB_RESULT_LIMIT,
-            keep_unsized=parsed["size_lenient"], sizes=parsed["sizes"] if size else None,
-            min_price=parsed["min_price"], filters=filters, prefs=prefs, patient=False, info=rank_info)
-        found.update(results=results, statuses=statuses)
+        sizes = parsed["sizes"] if size else None
+        args = dict(wardrobe=wardrobe, limit=config.WEB_RESULT_LIMIT, keep_unsized=parsed["size_lenient"],
+                    sizes=None if parsed["size_soft"] else sizes,
+                    soft_sizes=sizes if parsed["size_soft"] else None,
+                    min_price=parsed["min_price"], filters=filters, prefs=prefs, patient=False, info=rank_info)
+        if "broadened" not in found:   # the first search broadens when short; a relaxed retry doesn't
+            results, statuses, found["broadened"] = search_broadened(description, max_price=max_price, **args)
+        else:
+            results, statuses = search_with_status(description, None, max_price, **args)
+        found.update(results=results, statuses=found.get("statuses") or statuses)
         return results
 
-    session = run_agent(body.q, wardrobe, parsed=parsed, search=direct_search, prefs=prefs)
-    observe.save_trace("search", body.q, user.id if user else None, session)
+    if quick:   # a filter changed: results only; the page asks /search/style for the styling
+        direct_search(parsed["description"], parsed["size"], parsed["max_price"])
+        session = {"relaxed": None, "clarify": None, "selected_item": None,
+                   "error": None if found["results"] else "empty", "styling_error": None,
+                   "outfit_suggestion": None, "fit_card": None, "fit_verdict": None,
+                   "planner": "none", "steps": [], "parsed": parsed}
+    else:
+        session = run_agent(body.q, wardrobe, parsed=parsed, search=direct_search, prefs=prefs)
+        observe.save_trace("search", body.q, user.id if user else None, session)
     parsed = {**parsed, **{k: session["parsed"].get(k) for k in ("size", "max_price")}}
     if session["relaxed"]:
         chips = _relaxed_chips(chips, parsed, session["relaxed"])
@@ -301,7 +329,8 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
                     "sizes": parsed["sizes"] if parsed.get("size") else [],
                     "conditions": body.conditions, "colors": body.colors,
                     "gender": prefs.get("gender") or "any", "within_days": body.within_days,
-                    "stores": body.stores, "location": None},
+                    "stores": body.stores,
+                    "location": body.location or (profile or {}).get("location") or DEFAULT_LOCATION},
         "filter_support": catalog.FILTER_SUPPORT,
         "results": [_public_listing(r, saved) for r in results],
         "stores": panel,
@@ -309,14 +338,17 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
         "personalized": bool(closet),
         "signed_in": user is not None,
         "closet_count": len(closet),
-        "profile": {"sizes": catalog.normalize_sizes(profile.get("sizes")), "budget": profile.get("budget"),
-                    "budget_min": profile.get("budget_min"), "gender": profile.get("gender")}
+        "profile": {"sizes": catalog.normalize_sizes(profile.get("sizes"), profile.get("gender")),
+                    "budget": profile.get("budget"), "budget_min": profile.get("budget_min"),
+                    "gender": profile.get("gender")}
         if profile else None,
         "agent": {"planner": session["planner"], "steps": [s["tool"] for s in session["steps"]],
                   "ranking": rank_info.get("ranking")},
         "relaxed": session["relaxed"],
+        "broadened": found.get("broadened"),
         "clarify": session["clarify"],
         "styling": None,
+        "styling_deferred": quick and bool(results),
         "fit_card": None,
         "fit_verdict": None,
         "empty": None,
@@ -324,27 +356,33 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     if session["clarify"]:   # too vague to search: one question, no results
         return response
     if session["error"]:     # nothing matched even after relaxing: no styling model call was made
-        response["empty"] = {"message": catalog.empty_message(parsed, live_stores),
+        response["empty"] = {"title": catalog.empty_title(config.DATA_MODE),
+                             "message": catalog.empty_message(parsed, live_stores),
                              "relax": catalog.relax_options(parsed)}
+        return response
+    if quick:
         return response
 
     if session["styling_error"]:
         response["styling"] = {"text": None, "items": [], "unavailable": STYLING_UNAVAILABLE}
         return response
 
-    outfit = session["outfit_suggestion"] or {}
+    response["styling"] = _styling_out(user, closet, session["outfit_suggestion"] or {})
+    response["fit_card"] = session["fit_card"]
+    response["fit_verdict"] = session["fit_verdict"]
+    return response
+
+
+def _styling_out(user: User | None, closet: list[dict], outfit: dict) -> dict:
     by_id = {c["id"]: c for c in closet}
     used = [by_id[i] for i in outfit.get("item_ids") or [] if i in by_id]
     used_items = _with_photos(user, used) if user and used else []
-    response["styling"] = {
+    return {
         "text": outfit.get("text"),
         "items": [{"id": c["id"], "name": c["name"], "category": c["category"], "thumb": c["thumb"],
                    "photo": c["photo"]} for c in used_items],
         "unavailable": None,
     }
-    response["fit_card"] = session["fit_card"]
-    response["fit_verdict"] = session["fit_verdict"]
-    return response
 
 
 # ── Home ─────────────────────────────────────────────────────────────────────
@@ -568,7 +606,7 @@ def _save_outfit(user: User, item: dict, **fields) -> None:
                      upsert=True, on_conflict="item_id")
 
 
-def build_and_save_outfit(user: User, item: dict) -> None:
+def build_and_save_outfit(user: User, item: dict, live_calls: int | None = None) -> None:
     """Plan the outfit, find listings, save it. Runs after the response (BackgroundTasks)."""
     try:
         profile = _get_profile(user)
@@ -577,7 +615,8 @@ def build_and_save_outfit(user: User, item: dict) -> None:
             prefs["gender"] = item["gender"]
         _save_outfit(user, item, status="pending", data_mode=config.DATA_MODE, error=None)
         outfit = stylist.build_outfit(item, prefs, _budget(profile),
-                                      live_calls=config.STYLIST_LIVE_CALLS, patient=False)
+                                      live_calls=config.STYLIST_LIVE_CALLS if live_calls is None else live_calls,
+                                      patient=False)
         _save_outfit(user, item, status="ready", outfit=outfit, data_mode=config.DATA_MODE, error=None)
         observe.save_usage("stylist", item.get("name"), user.id, outfit["usage"],
                            [{"tool": "plan_outfit", "result": outfit.get("title")}]
@@ -593,8 +632,8 @@ def build_and_save_outfit(user: User, item: dict) -> None:
             pass
 
 
-def _queue_outfit(background: BackgroundTasks, user: User, item: dict) -> None:
-    background.add_task(build_and_save_outfit, user, item)
+def _queue_outfit(background: BackgroundTasks, user: User, item: dict, live_calls: int | None = None) -> None:
+    background.add_task(build_and_save_outfit, user, item, live_calls)
 
 
 def _outfit_out(user: User, item: dict, row: dict | None) -> dict:
@@ -609,16 +648,42 @@ def _outfit_out(user: User, item: dict, row: dict | None) -> dict:
             "updated_at": row.get("updated_at")}
 
 
+def _needs_refresh(outfit: dict | None) -> bool:
+    """A ready outfit whose listing snapshots aged past 24 h (or an old v1 outfit), built over an hour ago."""
+    if not outfit:
+        return False
+    pieces = outfit.get("pieces") or []
+    if not any(p.get("expired") for p in pieces) and outfit.get("version", 1) >= 2:
+        return False
+    try:
+        import datetime as dt
+        built = dt.datetime.fromisoformat(str(outfit.get("generated_at")).replace("Z", "+00:00"))
+        return dt.datetime.now(dt.timezone.utc) - built > dt.timedelta(hours=1)
+    except ValueError:
+        return True
+
+
 @app.get("/closet/items/{item_id}/outfit")
-def get_outfit(item_id: str, user: User = Depends(require_user)):
+def get_outfit(item_id: str, background: BackgroundTasks, user: User = Depends(require_user)):
     item = _own_item(user, item_id)
     rows = _db(user).select("closet_outfits", {"select": "*", "item_id": f"eq.{item_id}"})
     out = _outfit_out(user, item, rows[0] if rows else None)
     out["item_photo"] = _with_photos(user, [item])[0]["photo"]
     saved = _saved_keys(user)
-    for piece in (out["outfit"] or {}).get("pieces") or []:
+    pieces = (out["outfit"] or {}).get("pieces") or []
+    urls = previews.signed([p.get("preview_path") for p in pieces])
+    for piece in pieces:
         if piece.get("listing"):
             piece["listing"] = _public_listing(piece["listing"], saved)
+        piece.setdefault("kind", "listing" if piece.get("listing") else "idea")
+        piece["preview_url"] = urls.get(piece.get("preview_path") or "")
+        if piece["kind"] == "ai_preview" and not piece["preview_url"]:
+            piece["kind"] = "idea"
+    # Snapshots older than 24 h are hidden; rebuild from the fresh cache so the pictures come back.
+    if out["status"] == "ready" and _needs_refresh(out["outfit"]) and outfit_limiter.allow(user.id)[0]:
+        _save_outfit(user, item, status="pending", data_mode=config.DATA_MODE, error=None)
+        _queue_outfit(background, user, item, live_calls=0)   # a refresh reads the cache only
+        out["status"] = "pending"
     return out
 
 
@@ -694,6 +759,38 @@ class SaveIn(BaseModel):
     listing: ListingIn
 
 
+class StyleIn(BaseModel):
+    q: str = Field(min_length=1, max_length=200)
+    listing: ListingIn
+
+
+@app.post("/search/style")
+def style_listing(body: StyleIn, request: Request, user: User | None = Depends(optional_user)):
+    """How to wear one listing with the user's closet, plus the fit card: the styling half of /search."""
+    allowed, retry = style_limiter.allow(_client_key(request, user))
+    if not allowed:
+        raise HTTPException(429, f"Give the stylist a moment. Try again in {retry} seconds.",
+                            headers={"Retry-After": str(retry)})
+    closet = _closet(user) if user else []
+    item = body.listing.model_dump()
+    started = time.monotonic()
+    import generate
+    try:
+        with generate.meter() as m:
+            outfit = suggest_outfit(item, _wardrobe(closet))
+            card = create_fit_card_full(outfit, item)
+    except Exception as exc:  # noqa: BLE001 — results still stand; only the styling is missing
+        log.warning("styling failed: %s", config.redact(exc))
+        return {"styling": {"text": None, "items": [], "unavailable": STYLING_UNAVAILABLE},
+                "fit_card": None, "fit_verdict": None}
+    observe.save_usage("style", body.q, user.id if user else None,
+                       {**m, "latency_ms": int((time.monotonic() - started) * 1000), "tool_calls": 2},
+                       [{"tool": "suggest_outfit", "result": outfit.get("text")},
+                        {"tool": "create_fit_card", "result": card["caption"]}])
+    return {"styling": _styling_out(user, closet, outfit), "fit_card": card["caption"],
+            "fit_verdict": card["verdict"]}
+
+
 @app.get("/saved")
 def list_saved(user: User = Depends(require_user)):
     rows = _db(user).select("saved_items", {"select": "*", "user_id": f"eq.{user.id}",
@@ -720,14 +817,21 @@ def unsave_listing(source: str, listing_id: str, user: User = Depends(require_us
 # ── Profile and account ──────────────────────────────────────────────────────
 
 class Sizes(BaseModel):
+    """US retail size groups (api/catalog.py SIZE_KEYS). Older keys are read by catalog.normalize_sizes."""
+    size_range: list[Literal["regular", "petite", "plus"]] = Field(default=[], max_length=1)
     tops: list[str] = Field(default=[], max_length=24)
     bottoms_waist: list[str] = Field(default=[], max_length=24)
-    bottoms_inseam: list[str] = Field(default=[], max_length=12)
-    bottoms: list[str] = Field(default=[], max_length=12)
-    dresses: list[str] = Field(default=[], max_length=24)
+    bottoms_inseam: list[Literal["Short", "Regular", "Long"]] = Field(default=[], max_length=3)
     shoes: list[str] = Field(default=[], max_length=24)
+    men_tops: list[str] = Field(default=[], max_length=12)
+    men_neck: list[str] = Field(default=[], max_length=12)
+    men_sleeve: list[str] = Field(default=[], max_length=12)
+    men_waist: list[str] = Field(default=[], max_length=24)
+    men_inseam: list[str] = Field(default=[], max_length=12)
+    men_shoes: list[str] = Field(default=[], max_length=24)
 
-    @field_validator("*")
+    @field_validator("tops", "bottoms_waist", "shoes", "men_tops", "men_neck", "men_sleeve",
+                     "men_waist", "men_inseam", "men_shoes")
     @classmethod
     def _values(cls, v):
         return _clean_list(v, 24, 10)
@@ -750,12 +854,19 @@ class ProfilePatch(BaseModel):
     colors: list[str] | None = None
     budget: float | None = Field(default=None, ge=0, le=100000)
     budget_min: float | None = Field(default=None, ge=0, le=100000)
+    location: str | None = Field(default=None, max_length=80)   # US ZIP or city, for FB Marketplace
     email_opt_in: bool | None = None
+
+    @field_validator("location")
+    @classmethod
+    def _location(cls, v):
+        return (v or "").strip() or None
 
 
 def _profile_out(row: dict) -> dict:
     created, updated = row.get("created_at") or "", row.get("updated_at") or ""
-    return {**row, "sizes": catalog.normalize_sizes(row.get("sizes")),
+    return {**row, "sizes": catalog.normalize_sizes(row.get("sizes"), row.get("gender")),
+            "location": row.get("location") or DEFAULT_LOCATION,
             "measurements": row.get("measurements") or {},
             "onboarded": bool(updated and created and updated[:19] != created[:19])}
 

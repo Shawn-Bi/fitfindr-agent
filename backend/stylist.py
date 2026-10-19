@@ -15,8 +15,17 @@ The AI stylist (B2): a complete outfit built FOR one closet item.
    rules: same category, gender, not kids, inside the budget, has a photo, no
    clear colour/fabric clash. Then semantic similarity orders them.
 3. pick_listings() — one model call sees each piece's top candidates and
-   keeps a listing only if it truly fits; otherwise the piece is shown as a
-   styled description with a "Search this" button. Never an irrelevant item.
+   keeps a listing only if it truly fits ("kind": "listing"). Pieces left
+   empty get one more live search (within the budget) and a second pick.
+4. Every piece gets a picture (P8 never shows an empty tile):
+   - "closest": the closest real listing that still matches the piece's
+     category, gender and colour family (any budget, any fabric);
+   - "ai_preview": an AI-generated flat-lay of the planned piece, stored
+     once in Supabase Storage (previews.py), labelled as not a real listing;
+   - when image generation isn't available: the closest cached listing in
+     the same category ("closest", with a note that the colour differs);
+   - "idea" (colour swatches and the name) only if the pool has nothing at
+     all in that category.
 
 No listing is invented: every listing is a snapshot of a real response, with
 the time it was fetched (`found_at`), and the API hides snapshots older than
@@ -33,7 +42,7 @@ import generate
 from generate import loads_json
 import ranking
 from sources import fetch_candidates, recent_pool
-from tools import is_kids_item
+from tools import is_kids_item, is_not_clothing
 
 SLOTS = {"top": "tops", "bottom": "bottoms", "outerwear": "outerwear", "shoes": "shoes", "bag": "accessories"}
 # Which slots may be planned around an item of each closet category.
@@ -81,6 +90,8 @@ def plan_prompt(item: dict, prefs: dict, budget: tuple) -> str:
     body = ""
     if m.get("height"):
         body = f" Height: {m['height']} {'cm' if m.get('unit') == 'cm' else 'in'}."
+    if prefs.get("sizes_text"):
+        body += f" Sizes (US): {prefs['sizes_text']}."
     return (
         "You are the creative director of a luxury fashion house, styling a client's own piece.\n"
         f"The client is {who}. Their piece: {_item_line(item)}.\n"
@@ -202,7 +213,7 @@ def piece_text(piece: dict) -> str:
 
 def fits_rules(listing: dict, piece: dict, gender: str | None, budget: tuple) -> bool:
     low, high = budget
-    if not listing.get("image_url") or is_kids_item(listing):
+    if not listing.get("image_url") or is_kids_item(listing) or is_not_clothing(listing):
         return False
     if high is not None and listing["price"] > high:
         return False
@@ -313,41 +324,113 @@ def public_listing(listing: dict) -> dict:
     return {k: listing.get(k) for k in keep}
 
 
+def _ranked(piece: dict, listings: list[dict], patient: bool) -> list[dict]:
+    if not listings:
+        return []
+    sims = ranking.similarity(piece_text(piece), listings, patient=patient)
+    if sims is None:   # no embeddings: keyword overlap
+        words = set(re.findall(r"[a-z]{3,}", piece_text(piece).lower()))
+        sims = [len(words & set(re.findall(r"[a-z]{3,}", ranking.listing_text(x).lower()))) / max(1, len(words))
+                for x in listings]
+    return [listings[i] for _, i in sorted(zip(sims, range(len(listings))), key=lambda t: -t[0])]
+
+
+def _usable_photo(listing: dict, piece: dict, gender: str | None) -> bool:
+    return (bool(listing.get("image_url")) and not is_kids_item(listing) and not is_not_clothing(listing)
+            and attributes.listing_category(listing) == piece["category"]
+            and attributes.gender_ok(listing, gender))
+
+
+def closest_find(piece: dict, pool: list[dict], gender: str | None, patient: bool = True,
+                 same_colour: bool = True) -> dict | None:
+    """
+    The closest real listing for a piece no listing passed the strict check
+    for: same category and gender, and (same_colour) a colour of the same
+    family named in the title. Any price, any fabric.
+    """
+    wanted = attributes.colors_in(" ".join(piece.get("colors") or []))
+    families = {attributes.COLOR_FAMILY.get(c, c) for c in wanted}
+    ok = []
+    for listing in _dedupe(pool):
+        if not _usable_photo(listing, piece, gender):
+            continue
+        if same_colour and families:
+            found = {attributes.COLOR_FAMILY.get(c, c) for c in attributes.colors_in(listing["title"])}
+            if not found & families:
+                continue
+        ok.append(listing)
+    ranked = _ranked(piece, ok, patient)
+    return ranked[0] if ranked else None
+
+
 def build_outfit(item: dict, prefs: dict, budget: tuple = (None, None), *, live_calls: int = 0,
                  plan: dict | None = None, pool: list[dict] | None = None,
-                 patient: bool = True, cache_ok: bool = True) -> dict:
+                 patient: bool = True, cache_ok: bool = True, previews_ok: bool = True) -> dict:
     """
     The finished outfit (see module docstring). `live_calls` caps live
     RapidAPI searches for this outfit (0 = cached/fixtures only). `plan` and
     `pool` let the overnight batch plan first and share searches.
+    `previews_ok` allows AI preview images for pieces with no listing at all.
     """
+    import previews
+
     gender = prefs.get("gender")
     with generate.meter() as m:
         plan = plan or plan_outfit(item, prefs, budget, cache_ok=cache_ok)
         pool = list(pool if pool is not None else recent_pool())
-        options, live_used = [], 0
+        searched, live_used = set(), 0
+
+        def search_live(piece) -> bool:
+            nonlocal live_used
+            if live_used >= live_calls or piece["search"].lower() in searched:
+                return False
+            searched.add(piece["search"].lower())
+            try:
+                found, was_live = live_search(piece["search"], budget)
+            except Exception:  # noqa: BLE001 — a paused or failing store just means no listing
+                return False
+            live_used += int(was_live)
+            pool.extend(found)
+            return bool(found)
+
+        options = []
         for piece in plan["pieces"]:
             found = candidates(piece, pool, gender, budget, patient=patient)
-            if not found and live_used < live_calls:
-                live_used += 1
-                try:
-                    pool.extend(live_search(piece["search"], budget)[0])
-                except Exception:  # noqa: BLE001 — a paused or failing store just means no listing
-                    pass
+            if not found and search_live(piece):
                 found = candidates(piece, pool, gender, budget, patient=patient)
             options.append(found)
         picks = pick_listings(item, plan, options, gender, cache_ok=cache_ok)
+        # Pieces the strict pick left empty: one more live search each (budget allowing), then re-pick.
+        retry = [n for n, (index, _) in enumerate(picks) if index is None and search_live(plan["pieces"][n])]
+        if retry:
+            for n in retry:
+                options[n] = candidates(plan["pieces"][n], pool, gender, budget, patient=patient)
+            again = pick_listings(item, plan, options, gender, cache_ok=cache_ok)
+            for n in retry:
+                picks[n] = again[n]
 
-    pieces = []
-    for piece, cands, (index, reason) in zip(plan["pieces"], options, picks):
-        listing = cands[index] if index is not None else None
-        pieces.append({**piece,
-                       "listing": public_listing(listing) if listing else None,
-                       "found_at": _found_at(listing) if listing else None,
-                       "match_reason": reason if listing else None,
-                       "similarity": listing.get("_sim") if listing else None})
+        pieces = []
+        for piece, cands, (index, reason) in zip(plan["pieces"], options, picks):
+            listing = cands[index] if index is not None else None
+            kind, note, preview_path = "listing", None, None
+            if listing is None:
+                listing = closest_find(piece, pool, gender, patient=patient)
+                kind = "closest" if listing else None
+            if listing is None and previews_ok:
+                preview_path = previews.get_or_create(piece, gender)
+                kind = "ai_preview" if preview_path else None
+            if kind is None:   # no image model: the closest cached photo in the same category
+                listing = closest_find(piece, pool, gender, patient=patient, same_colour=False)
+                kind, note = ("closest", "Similar piece in a different colour") if listing else ("idea", None)
+            pieces.append({**piece, "kind": kind,
+                           "listing": public_listing(listing) if listing else None,
+                           "found_at": _found_at(listing) if listing else None,
+                           "match_reason": reason if kind == "listing" else None,
+                           "closest_note": note,
+                           "preview_path": preview_path,
+                           "similarity": listing.get("_sim") if listing else None})
     return {
-        "version": 1,
+        "version": 2,
         "item": {k: item.get(k) for k in ("id", "name", "category", "colors")},
         **{k: plan.get(k) for k in ("title", "concept", "palette", "occasion", "notes", "planner")},
         "styles": prefs.get("styles") or [DEFAULT_STYLE],
@@ -377,7 +460,8 @@ def hide_stale(outfit: dict, max_age_hours: int = config.CACHE_MAX_AGE_HOURS) ->
         except ValueError:
             age = None
         if piece.get("listing") and (age is None or age > dt.timedelta(hours=max_age_hours)):
-            piece = {**piece, "listing": None, "match_reason": None, "expired": True}
+            piece = {**piece, "listing": None, "match_reason": None, "expired": True,
+                     "kind": "ai_preview" if piece.get("preview_path") else "idea"}
         pieces.append(piece)
     return {**outfit, "pieces": pieces}
 

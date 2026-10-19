@@ -127,3 +127,37 @@ def from_resale(item: dict, fetched_at: str | None = None) -> dict | None:
         brand=item.get("brand"),
         listed_at=item.get("created_at"),
     )
+
+
+# ─── Etsy (etsy-api2: GET /product/search) ───────────────────────────────────
+# Raw card fields seen in tests/fixtures/etsy_*.json:
+#   listingId, title, url, image, price {amount, currency, originalAmount,
+#   discountPercent}, shop {id, name, rating, ratingCount}, isAd,
+#   isBestseller, isStarSeller, isEtsysPick, freeShipping, isDigitalDownload
+# No size, condition, category, brand or listing date on search cards: None.
+
+def from_etsy(card: dict, fetched_at: str | None = None) -> dict | None:
+    """
+    One Etsy search card → standard listing dict, or None if unusable.
+    Non-USD prices and digital downloads (patterns, printables) are dropped.
+    """
+    if not isinstance(card, dict) or card.get("isDigitalDownload"):
+        return None
+    price = card.get("price")
+    if isinstance(price, dict):
+        currency = clean_str(price.get("currency"))
+        if currency and currency.upper() != "USD":
+            return None
+        price = price.get("amount")
+    url = clean_str(card.get("url"))
+    if url:
+        url = url.split("?")[0]          # drop tracking parameters
+    return make_listing(
+        id=card.get("listingId"),
+        title=card.get("title"),
+        price=price,
+        platform="etsy",
+        url=url,
+        image_url=card.get("image"),
+        updated_at=fetched_at,
+    )

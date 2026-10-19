@@ -87,12 +87,12 @@ class SearchListingsFixturesTest(unittest.TestCase):
         listings, statuses = fetch_candidates("anything")
         self.assertTrue(listings)
         by_platform = {s["platform"]: s["status"] for s in statuses}
-        for platform in ("depop", "poshmark", "mercari", "ebay"):
+        for platform in ("depop", "poshmark", "mercari", "ebay", "etsy"):
             self.assertEqual(by_platform[platform], "fixtures")
-        # not wired up yet: shown as Coming soon, never filled with anything
-        self.assertEqual(by_platform["etsy"], "coming_soon")
+        # host not subscribed: shown as Coming soon, never filled with anything
         self.assertEqual(by_platform["fb_marketplace"], "coming_soon")
-        self.assertFalse([x for x in listings if x["platform"] in ("etsy", "fb_marketplace")])
+        self.assertTrue([x for x in listings if x["platform"] == "etsy"])
+        self.assertFalse([x for x in listings if x["platform"] == "fb_marketplace"])
 
     def test_price_ceiling_respected(self):
         results = search_listings("vintage graphic tee", max_price=30)

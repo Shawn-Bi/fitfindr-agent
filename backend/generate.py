@@ -551,3 +551,27 @@ def embed(texts: list[str], task: str = "SEMANTIC_SIMILARITY", patient: bool = T
             finally:
                 db.close()
     return [found[k] for k in keys]
+
+
+# ─── Images ──────────────────────────────────────────────────────────────────
+
+def generate_image(prompt: str, model: str | None = None) -> tuple[bytes, str]:
+    """
+    One generated image: (bytes, mime type). Raises like generate() when the
+    model can't be reached; never cached here (callers store the result).
+    """
+    from google.genai import types
+
+    model = model or config.IMAGE_MODEL
+    if not model:
+        raise ModelUnavailable("Image generation is turned off (FITFINDR_IMAGE_MODEL is empty).")
+    response = _request(model, lambda client: client.models.generate_content(
+        model=model, contents=prompt,
+        config=types.GenerateContentConfig(response_modalities=["IMAGE"])), retries=1)
+    candidates = getattr(response, "candidates", None) or []
+    parts = candidates[0].content.parts if candidates and candidates[0].content else []
+    for part in parts or []:
+        data = getattr(part, "inline_data", None)
+        if data and data.data:
+            return data.data, data.mime_type or "image/png"
+    raise ModelUnavailable("The image model answered without an image.")

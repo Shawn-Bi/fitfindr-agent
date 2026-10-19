@@ -143,6 +143,23 @@ AGENT_MAX_STEPS = 8          # tool calls per run, then the deterministic fallba
 # outfit, so this is the per-edit cost against the 40-call monthly stop line.
 STYLIST_LIVE_CALLS = int(os.getenv("FITFINDR_STYLIST_LIVE_CALLS", "1"))
 
+# Image model for "AI preview" tiles: a planned outfit piece with no real
+# listing at all gets one generated flat-lay, stored in Supabase Storage and
+# reused. Empty = off. The free tier has no image quota (Oct 2026: HTTP 429),
+# so the stylist falls back to the closest cached listing photo.
+IMAGE_MODEL = os.getenv("FITFINDR_IMAGE_MODEL", "gemini-2.5-flash-image").strip()
+
+# ─── Search broadening (tools.search_broadened) ──────────────────────────────
+# A search with fewer than 4 results widens step by step. Query rewrites are
+# new store searches: at most this many extra live searches per user search
+# (each is one call per store host); later steps use the 24 h cache only.
+BROADEN_LIVE_FETCHES = int(os.getenv("FITFINDR_BROADEN_LIVE_FETCHES", "2"))
+
+# Which hosts may make live calls (comma-separated env var names, e.g.
+# "RESALE_API_HOST"). Empty = all. Others still serve their 24 h cache. For
+# scripts that must stay inside a per-host call budget.
+LIVE_SOURCES = {s.strip() for s in os.getenv("FITFINDR_LIVE_SOURCES", "").split(",") if s.strip()}
+
 
 # ─── Rate limiting and quota guards ──────────────────────────────────────────
 # You should not need to touch these.

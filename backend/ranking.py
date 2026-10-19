@@ -76,6 +76,9 @@ def preference_boost(item: dict, prefs: dict | None) -> float:
     closet_words = prefs.get("closet_words") or set()
     if closet_words & _words(title):
         boost += 0.01
+    size_range = prefs.get("size_range")
+    if size_range in ("petite", "plus") and re.search(rf"\b{size_range}\b", title):
+        boost += 0.02
     return min(boost, 0.06)
 
 
@@ -91,8 +94,9 @@ def similarity(query: str, items: list[dict], patient: bool = False) -> list[flo
 
 
 def rerank(query: str, items: list[dict], prefs: dict | None = None,
-           patient: bool = False) -> tuple[list[dict], dict]:
-    wanted = attributes.query_attributes(query)
+           patient: bool = False, wanted: dict | None = None) -> tuple[list[dict], dict]:
+    """`wanted`: the attributes mismatches are judged against (default: the query's)."""
+    wanted = wanted or attributes.query_attributes(query)
     dropped: dict[str, int] = {}
     kept = []
     for item in items:

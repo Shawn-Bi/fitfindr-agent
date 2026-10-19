@@ -169,7 +169,7 @@ class RankingTest(unittest.TestCase):
             title = r["title"].lower()
             self.assertNotIn("corduroy", title)
             self.assertNotIn("olive", title)
-            self.assertEqual(attributes.listing_category(r), "bottoms")
+            self.assertIn(attributes.listing_category(r), ("bottoms", None))   # e.g. "white denim Wranglers"
 
     def test_mismatch_rules(self):
         wanted = attributes.query_attributes("white denim pants")
@@ -306,7 +306,12 @@ class StylistTest(unittest.TestCase):
         self.assertIsNotNone(top["listing"])
         self.assertEqual(attributes.listing_category(top["listing"]), "tops")
         self.assertEqual(top["match_reason"], "Right tee")
-        self.assertIsNone(jacket["listing"])           # not chosen → described, with "Search this"
+        self.assertEqual(top["kind"], "listing")
+        # not chosen → the closest real listing of the same category, gender and colour family
+        self.assertEqual(jacket["kind"], "closest")
+        self.assertEqual(attributes.listing_category(jacket["listing"]), "outerwear")
+        self.assertIn("blue", attributes.colors_in(jacket["listing"]["title"]) | {"light blue"})
+        self.assertIsNone(jacket["match_reason"])
         self.assertTrue(jacket["search"])
         self.assertEqual(out["live_calls"], 0)
         # the model sometimes drops the {"choices": ...} wrapper; the picks must survive that
@@ -332,11 +337,30 @@ class ProfileAndCatalogTest(unittest.TestCase):
         self.assertEqual(sizes["shoes"], ["8"])
 
     def test_sizes_per_category(self):
-        sizes = {"tops": ["S", "M"], "bottoms_waist": ["28"], "bottoms": ["S"], "dresses": ["6"], "shoes": ["8"]}
-        self.assertEqual(catalog.sizes_for("wide leg trousers", sizes), ["28", "S"])
-        self.assertEqual(catalog.sizes_for("slip dress", sizes, "women"), ["6"])
+        sizes = {"tops": ["S", "4"], "bottoms_waist": ["28"], "shoes": ["8"],
+                 "men_tops": ["L"], "men_neck": ["15.5"], "men_waist": ["32"], "men_shoes": ["10"]}
+        self.assertEqual(catalog.sizes_for("wide leg trousers", sizes, "women"), ["28", "4"])
+        self.assertEqual(catalog.sizes_for("slip dress", sizes, "women"), ["S", "4"])
         self.assertEqual(catalog.sizes_for("slip dress", sizes, "men"), [])
-        self.assertEqual(catalog.sizes_for("graphic tee", sizes), ["S", "M"])
+        self.assertEqual(catalog.sizes_for("graphic tee", sizes, "women"), ["S", "4"])
+        self.assertEqual(catalog.sizes_for("oxford shirt", sizes, "men"), ["L", "15.5"])
+        self.assertEqual(catalog.sizes_for("chinos", sizes, "men"), ["32"])
+        self.assertEqual(catalog.sizes_for("loafers", sizes, "both"), ["8", "10"])
+        self.assertEqual(catalog.sizes_for("tote bag", sizes, "women"), [])
+
+    def test_older_size_lists_are_read_into_the_new_groups(self):
+        old = {"tops": ["S"], "dresses": ["6"], "bottoms": ["M"], "bottoms_inseam": ["28", "32"]}
+        sizes = catalog.normalize_sizes(old, "women")
+        self.assertEqual(sizes["tops"], ["S", "6", "M"])
+        self.assertEqual(sizes["bottoms_inseam"], ["Short", "Regular"])
+        men = catalog.normalize_sizes({"tops": ["L"], "bottoms_waist": ["32"]}, "men")
+        self.assertEqual((men["men_tops"], men["men_waist"], men["tops"]), (["L"], ["32"], []))
+
+    def test_petite_sizes_match_petite_labels(self):
+        sizes = {"size_range": ["petite"], "tops": ["S"]}
+        wanted = catalog.sizes_for("turtleneck", sizes, "women")
+        self.assertTrue(tools.size_matches(wanted[1], "SP") or "SP" in wanted)
+        self.assertTrue(any(tools.size_matches(s, "PS") for s in wanted))
 
     def test_budget_range_from_profile(self):
         parsed, chips = catalog.resolve_filters("graphic tee", {"budget": 40, "budget_min": 10})
@@ -347,7 +371,7 @@ class ProfileAndCatalogTest(unittest.TestCase):
 
     def test_location_filter_is_never_faked(self):
         self.assertFalse(catalog.FILTER_SUPPORT["location"]["available"])
-        self.assertIn("Not available", catalog.FILTER_SUPPORT["location"]["note"])
+        self.assertIn("Facebook Marketplace", catalog.FILTER_SUPPORT["location"]["note"])
 
 
 class SmallPartsTest(unittest.TestCase):

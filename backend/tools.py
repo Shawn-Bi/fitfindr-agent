@@ -44,6 +44,18 @@ _KIDS_TITLE = re.compile(
     r"|\b\d{1,2}T\b|\b\d{1,2}\s?(mos|months)\b", re.I)
 
 
+# Things stores list next to clothes that aren't clothes: fabric by the yard,
+# sewing patterns, printables (mostly Etsy).
+_NOT_CLOTHING = re.compile(
+    r"\b(yardage|by the yard|sewing pattern|pdf pattern|digital pattern|printable|svg|doll clothes|"
+    r"fabric (?:for|by|remnant|bundle|panel)|(?:denim|cotton|linen|wool|stretch|knit) fabric\b"
+    r"(?!\s+(?:\w+\s+)?(?:shirt|top|dress|pants|jeans|jacket|skirt|coat)))", re.I)
+
+
+def is_not_clothing(item: dict) -> bool:
+    return bool(_NOT_CLOTHING.search(item.get("title") or ""))
+
+
 def wants_kids(query: str) -> bool:
     return bool(_KIDS_QUERY.search(query or ""))
 
@@ -69,6 +81,13 @@ def size_matches(size: str, item_size: str | None) -> bool:
         if wanted.isdigit() and (token == f"w{wanted}" or token.startswith(f"{wanted}x")):
             return True
     return False
+
+
+def size_rank(item: dict, sizes: list[str]) -> int:
+    """For a soft (profile) size: 0 = states one of `sizes`, 1 = states no size, 2 = another size."""
+    if item.get("size") is None:
+        return 1
+    return 0 if any(size_matches(s, item["size"]) for s in sizes) else 2
 
 
 def closet_affinity(item: dict, wardrobe: dict | None) -> int:
@@ -147,6 +166,7 @@ def search_with_status(
     keep_unsized: bool = False,
     *,
     sizes: list[str] | None = None,
+    soft_sizes: list[str] | None = None,
     min_price: float | None = None,
     filters: dict | None = None,
     prefs: dict | None = None,
@@ -173,8 +193,45 @@ def search_with_status(
     info:    optional dict filled with {"ranking": "semantic"|"keyword",
         "dropped": {...}} for the trace.
 
+    soft_sizes: profile sizes, a preference only: listings in those sizes
+        rank first, then listings with no size, then other sizes. Nothing
+        is excluded for size.
+
     Order: dedupe → price/size/kids/gender/filters → at least one query word
     → drop clear category/colour/fabric mismatches → semantic rerank.
+    """
+    candidates, statuses = fetch_candidates(description, max_price=max_price, min_price=min_price)
+    ranked = filter_and_rank(
+        candidates, description, size=size, max_price=max_price, wardrobe=wardrobe,
+        keep_unsized=keep_unsized, sizes=sizes, soft_sizes=soft_sizes, min_price=min_price,
+        filters=filters, prefs=prefs, patient=patient, info=info)
+    return ranked[:limit or config.SEARCH_RESULT_LIMIT], statuses
+
+
+def filter_and_rank(
+    candidates: list[dict],
+    description: str,
+    *,
+    size: str | None = None,
+    max_price: float | None = None,
+    wardrobe: dict | None = None,
+    keep_unsized: bool = False,
+    sizes: list[str] | None = None,
+    soft_sizes: list[str] | None = None,
+    min_price: float | None = None,
+    filters: dict | None = None,
+    prefs: dict | None = None,
+    patient: bool = True,
+    info: dict | None = None,
+    words: list[str] | None = None,
+    wanted: dict | None = None,
+) -> list[dict]:
+    """
+    The filtering and ranking half of search_with_status, on listings already
+    fetched. `words`: listings must contain one of these (default: the
+    description's words). `wanted`: the attributes mismatches are judged
+    against (default: the description's), so a broadened search still never
+    shows another category or colour than the one asked for.
     """
     import attributes
     import ranking
@@ -182,8 +239,7 @@ def search_with_status(
     filters = filters or {}
     prefs = dict(prefs or {})
     wanted_sizes = [s for s in (sizes or ([size] if size else [])) if s]
-    words = [w for w in _tokens(description) if len(w) > 2]
-    candidates, statuses = fetch_candidates(description, max_price=max_price, min_price=min_price)
+    words = words if words is not None else [w for w in _tokens(description) if len(w) > 2]
     allow_kids = wants_kids(description)
     gender = filters.get("gender") if "gender" in filters else prefs.get("gender")
     query_gender = attributes.query_gender(description)
@@ -209,6 +265,8 @@ def search_with_status(
             continue
         if not allow_kids and is_kids_item(item):
             continue
+        if is_not_clothing(item):
+            continue
         if not attributes.gender_ok(item, gender):
             continue
         if conditions and attributes.condition_bucket(item.get("condition")) not in conditions:
@@ -227,12 +285,174 @@ def search_with_status(
         prefs["closet_words"] = {w for owned in wardrobe["items"]
                                  for v in (owned.get("colors") or []) + (owned.get("style_tags") or [])
                                  for w in _tokens(v) if len(w) > 2}
-    ranked, rank_info = ranking.rerank(description, pool, prefs=prefs, patient=patient)
+    ranked, rank_info = ranking.rerank(description, pool, prefs=prefs, patient=patient, wanted=wanted)
     if info is not None:
         info.update(ranking=rank_info["method"], dropped=rank_info["dropped"])
     if wanted_sizes and keep_unsized:   # known size matches first; stable, so the order holds
         ranked.sort(key=lambda it: it["size"] is None)
-    return ranked[:limit or config.SEARCH_RESULT_LIMIT], statuses
+    if soft_sizes:
+        ranked.sort(key=lambda it: size_rank(it, soft_sizes))
+    return ranked
+
+
+# ── Broadening (few results) ──────────────────────────────────────────────────
+# When a search finds fewer than BROADEN_MIN results, it widens step by step,
+# in this order, and stops as soon as it has enough:
+#   1. drop extra adjectives (keep gender, colour, fabric and garment words):
+#      "womens ecru ribbed turtleneck" → "womens ecru turtleneck"
+#   2. a synonym of the garment word (pants → jeans, turtleneck → mock neck)
+#   3. drop a size the user set (a profile size never excluded anything)
+#   4. widen the price range +50%
+# Steps 1–2 are new store searches, so the one that drops the most words goes
+# first. Results are judged against the ORIGINAL request's category, colour,
+# fabric and gender throughout, so broadening never shows a mismatch. New
+# live store searches are capped (config.BROADEN_LIVE_FETCHES per search);
+# after that the steps use the 24 h cache only.
+
+BROADEN_MIN = 4
+
+# Garment word → other words stores use for the same thing (same category).
+SYNONYMS = {
+    "pants": ["jeans", "trousers"], "jeans": ["pants", "denim pants"], "trousers": ["pants", "slacks"],
+    "slacks": ["trousers"], "turtleneck": ["mock neck", "sweater"], "mock neck": ["turtleneck", "sweater"],
+    "sweater": ["pullover", "knit sweater"], "jumper": ["sweater"], "pullover": ["sweater"],
+    "cardigan": ["knit cardigan"], "tee": ["t-shirt", "shirt"], "t-shirt": ["tee"], "tshirt": ["tee"],
+    "blouse": ["top", "shirt"], "top": ["blouse", "shirt"], "shirt": ["button down", "blouse"],
+    "button down": ["shirt"], "hoodie": ["sweatshirt"], "sweatshirt": ["hoodie", "crewneck"],
+    "tank": ["tank top", "cami"], "cami": ["camisole", "tank top"], "jacket": ["coat"], "coat": ["jacket"],
+    "blazer": ["suit jacket"], "skirt": ["midi skirt"], "dress": ["midi dress"],
+    "sneakers": ["trainers", "shoes"], "trainers": ["sneakers"], "boots": ["booties"], "booties": ["boots"],
+    "loafers": ["flats"], "flats": ["loafers"], "heels": ["pumps"], "pumps": ["heels"],
+    "bag": ["purse", "handbag"], "purse": ["bag"], "handbag": ["bag"], "shorts": ["denim shorts"],
+}
+_SYN_RE = re.compile(r"\b(" + "|".join(sorted(map(re.escape, SYNONYMS), key=len, reverse=True)) + r")\b", re.I)
+
+
+def synonym_queries(description: str) -> list[str]:
+    """The description with its garment word swapped for each synonym, e.g. 'white denim jeans'."""
+    m = None
+    for m in _SYN_RE.finditer(description or ""):
+        pass                                    # the last garment word is the noun
+    if not m:
+        return []
+    word = m.group(1).lower()
+    out = []
+    for alt in SYNONYMS[word]:
+        q = re.sub(r"\s+", " ", description[:m.start()] + alt + description[m.end():]).strip()
+        if q.lower() != description.lower() and q.lower() not in [o.lower() for o in out]:
+            out.append(q)
+    return out
+
+
+def core_query(description: str) -> tuple[str, list[str]]:
+    """
+    (query with only gender, colour, fabric and garment words, the words dropped).
+    'womens ecru ribbed turtleneck' → ('womens ecru turtleneck', ['ribbed']).
+    """
+    import attributes
+
+    keep, dropped = [], []
+    for word in str(description or "").split():
+        w = word.lower().strip(".,!?")
+        if (attributes.colors_in(w) or attributes.materials_in(w) or attributes.query_gender(w)
+                or attributes.listing_category({"title": w}) or _SYN_RE.fullmatch(w)
+                or w in ("mock", "neck", "wide", "leg", "straight", "high", "waist", "midi", "maxi", "mini")):
+            keep.append(word)
+        else:
+            dropped.append(word)
+    if not keep or not dropped or not attributes.listing_category({"title": " ".join(keep)}):
+        return description, []
+    return " ".join(keep), dropped
+
+
+def _raised(max_price: float) -> float:
+    import math
+    return float(math.ceil(max_price * 1.5 / 5.0) * 5)
+
+
+def _join(parts: list[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def search_broadened(description: str, *, max_price: float | None = None, min_price: float | None = None,
+                     sizes: list[str] | None = None, keep_unsized: bool = False,
+                     soft_sizes: list[str] | None = None, wardrobe: dict | None = None,
+                     limit: int | None = None, filters: dict | None = None, prefs: dict | None = None,
+                     patient: bool = False, info: dict | None = None,
+                     min_results: int = BROADEN_MIN) -> tuple[list[dict], list[dict], dict | None]:
+    """
+    search_with_status, then the broadening steps above while there are fewer
+    than `min_results`. Returns (results, statuses, broadened) where
+    broadened is None (nothing changed) or {"steps": [...], "message": str,
+    "max_price": new max or None, "dropped_size": bool}.
+    """
+    import attributes
+
+    common = dict(wardrobe=wardrobe, filters=filters, prefs=prefs, patient=patient, info=info,
+                  soft_sizes=soft_sizes)
+    candidates, statuses = fetch_candidates(description, max_price=max_price, min_price=min_price)
+    words = [w for w in _tokens(description) if len(w) > 2]
+    hard_sizes = list(sizes or [])
+    price = max_price
+
+    def run():
+        return filter_and_rank(candidates, description, sizes=hard_sizes, keep_unsized=keep_unsized,
+                               max_price=price, min_price=min_price, words=words, wanted=wanted, **common)
+
+    wanted = attributes.query_attributes(description)
+    results = run()
+    if len(results) >= min_results:
+        return results[:limit or config.SEARCH_RESULT_LIMIT], statuses, None
+
+    first = len(results)
+    live_left = config.BROADEN_LIVE_FETCHES if config.DATA_MODE == "live" else 0
+    steps, said = [], []
+
+    def fetch_more(query, max_p):
+        nonlocal live_left
+        found, st = fetch_candidates(query, max_price=max_p, min_price=min_price, live=live_left > 0)
+        if any(s["status"] == "active" for s in st):
+            live_left -= 1
+        candidates.extend(found)
+        words.extend(w for w in _tokens(query) if len(w) > 2 and w not in words)
+
+    # 1–2. query rewrites: without the extra adjectives, then a synonym of the
+    # garment word. Each is one store search per host (cache first), so they
+    # run only while results are short; live calls are capped above.
+    core, dropped = core_query(description)
+    rewrites = ([("adjectives", core)] if dropped else []) + \
+        [("synonyms", q) for q in synonym_queries(core)[:1]]
+    for step, q in rewrites:
+        if len(results) >= min_results:
+            break
+        fetch_more(q, price)
+        results = run()
+        steps.append(step)
+        said.append("dropped " + _join([f"“{d}”" for d in dropped]) if step == "adjectives"
+                    else f"also searched “{q}”")
+    # 3. drop a size the user set
+    if len(results) < min_results and hard_sizes:
+        hard_sizes = []
+        results = run()
+        steps.append("size")
+        said.append("searched every size")
+    # 4. widen the price range +50%
+    if len(results) < min_results and price is not None:
+        price = _raised(price)
+        for q in [description] + [q for _, q in rewrites]:
+            fetch_more(q, price)
+        results = run()
+        steps.append("price")
+        said.append(f"raised the budget to ${price:.0f}")
+
+    if not steps:
+        return results[:limit or config.SEARCH_RESULT_LIMIT], statuses, None
+    n = len(results)
+    lead = (f"Only {first} exact match{'es' if first != 1 else ''}" if first else "No exact matches")
+    message = f"{lead}, so I {_join(said)}." + (f" Now {n} result{'s' if n != 1 else ''}." if n != first else "")
+    return results[:limit or config.SEARCH_RESULT_LIMIT], statuses, {
+        "steps": steps, "message": message,
+        "max_price": price if "price" in steps else None, "dropped_size": "size" in steps}
 
 
 def _listed_within(item: dict, days: int) -> bool:

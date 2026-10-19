@@ -39,6 +39,7 @@ SOURCE = "RESALE_API_HOST"                 # env var holding the RapidAPI host; 
 PLATFORMS = ("depop", "poshmark", "mercari", "ebay")
 FIXTURE_PREFIX = "resale"
 ENABLED = True
+PRICE_IN_QUERY = True    # min/max are sent to the API, so they are part of the cache key
 TIMEOUT_SECONDS = 20
 
 
