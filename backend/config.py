@@ -27,6 +27,23 @@ load_dotenv(REPO_ROOT / ".env")
 DATA_MODE = os.getenv("FITFINDR_DATA_MODE", "fixtures").strip().lower() or "fixtures"
 APP_ENV = os.getenv("APP_ENV", "development").strip().lower() or "development"
 
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+# Never print, log or commit these. redact() scrubs their current values out of
+# any text before it is shown or written to disk (error messages, run logs).
+
+SECRET_ENV_VARS = ("GEMINI_API_KEY", "RAPIDAPI_KEY",
+                   "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY")
+
+
+def redact(text) -> str:
+    text = str(text)
+    for name in SECRET_ENV_VARS:
+        value = os.getenv(name, "").strip()
+        if len(value) >= 8:
+            text = text.replace(value, f"[REDACTED {name}]")
+    return text
+
+
 if DATA_MODE not in ("fixtures", "live"):
     raise SystemExit(
         f"FITFINDR_DATA_MODE must be 'fixtures' or 'live', got {DATA_MODE!r}."

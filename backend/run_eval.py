@@ -201,7 +201,8 @@ def write_report(rows, args):
             if record["trace"]:
                 lines += ["Trace:", "", "```", record["trace"], "```", ""]
 
-    path.write_text("\n".join(lines), encoding="utf-8")
+    # Run logs get committed to a public repo: scrub any key values first.
+    path.write_text(config.redact("\n".join(lines)), encoding="utf-8")
 
     import generate
 

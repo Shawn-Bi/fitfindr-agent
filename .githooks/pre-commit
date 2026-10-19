@@ -1,0 +1,40 @@
+#!/bin/sh
+# FitFindr pre-commit secret guard. Enabled with:  git config core.hooksPath .githooks
+# Blocks a commit that would add .env files, closet photos, key-like strings,
+# or any value currently set in .env. Never prints the secret itself.
+
+fail=0
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# 1. Forbidden files
+for f in $staged; do
+  case "$f" in
+    .env.example) ;;
+    .env|.env.*|*/.env|*/.env.*|*.pem|*.key|backend/tests/closet_photos/*|*/.quota.json)
+      echo "BLOCKED: $f must not be committed (secret or private file)."; fail=1 ;;
+  esac
+done
+
+# Only the lines being added, excluding this hook itself
+added=$(git diff --cached -U0 --diff-filter=ACMR -- . ':(exclude).githooks/*' | grep '^+' | grep -v '^+++')
+
+# 2. Key-shaped strings (Google, Supabase JWT / secret, GitHub, private keys)
+if printf '%s\n' "$added" | grep -qE 'AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}|sb_secret_[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY'; then
+  echo "BLOCKED: a staged change contains something that looks like an API key or token."; fail=1
+fi
+
+# 3. The exact values currently in .env (catches RapidAPI keys, which have no fixed shape)
+if [ -f .env ]; then
+  for name in GEMINI_API_KEY RAPIDAPI_KEY SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+    value=$(grep -E "^${name}=" .env | head -n1 | cut -d= -f2- | tr -d '\r" '"'")
+    if [ ${#value} -ge 8 ] && printf '%s\n' "$added" | grep -qF -- "$value"; then
+      echo "BLOCKED: a staged change contains the value of $name from .env."; fail=1
+    fi
+  done
+fi
+
+if [ $fail -ne 0 ]; then
+  echo "Commit stopped. Remove the secret (git restore --staged <file>) and try again."
+  exit 1
+fi
+exit 0
