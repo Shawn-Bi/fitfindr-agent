@@ -14,8 +14,28 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).parent
-load_dotenv(ROOT / ".env")
+ROOT = Path(__file__).parent          # backend/
+REPO_ROOT = ROOT.parent               # FitFindr-Agent/, where .env lives
+load_dotenv(REPO_ROOT / ".env")
+
+
+# ─── Data mode ───────────────────────────────────────────────────────────────
+# fixtures: search reads recorded real responses from backend/tests/fixtures/.
+# live:     search calls RapidAPI (counted against the monthly quota).
+# The product never shows mock listings, so production must be live.
+
+DATA_MODE = os.getenv("FITFINDR_DATA_MODE", "fixtures").strip().lower() or "fixtures"
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower() or "development"
+
+if DATA_MODE not in ("fixtures", "live"):
+    raise SystemExit(
+        f"FITFINDR_DATA_MODE must be 'fixtures' or 'live', got {DATA_MODE!r}."
+    )
+if APP_ENV == "production" and DATA_MODE == "fixtures":
+    raise SystemExit(
+        "Refusing to start: APP_ENV=production with FITFINDR_DATA_MODE=fixtures. "
+        "Production must never serve recorded fixtures. Set FITFINDR_DATA_MODE=live."
+    )
 
 
 # ─── Windows console encoding ────────────────────────────────────────────────
@@ -91,5 +111,8 @@ CACHE_DIR = ROOT / ".cache"
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 
-DATA_DIR = ROOT / "data"
+DATA_DIR = ROOT / "data"                       # example wardrobe only, no listings
 RESULTS_DIR = ROOT / "results"
+FIXTURES_DIR = ROOT / "tests" / "fixtures"     # recorded real API responses
+QUOTA_FILE = ROOT / ".quota.json"              # TODO: move to Supabase api_usage
+CACHE_MAX_AGE_HOURS = 24                       # real-response cache lifetime

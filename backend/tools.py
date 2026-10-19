@@ -20,9 +20,11 @@ That last line is what your loop branches on. "Returns a list" earns nothing —
 the description has to say what is *in* the list.
 """
 
-import config  # noqa: F401 — you'll use this in search_listings
+import re
+
+import config
 from generate import generate
-from utils.data_loader import load_listings
+from sources import fetch_candidates
 
 
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
@@ -33,8 +35,10 @@ def search_listings(
     max_price: float | None = None,
 ) -> list[dict]:
     """
-    Search the listings data for items matching a description, and optionally a
-    size and a price ceiling.
+    Search the six US resale stores (via sources/) for items matching a
+    description, and optionally a size and a price ceiling. In fixtures mode
+    this reads recorded real responses from tests/fixtures/; it never reads
+    mock data.
 
     This is the tool that doesn't call the model, which makes it the easiest one
     to test and the one to move onto MCP in unit 4.
@@ -59,17 +63,13 @@ def search_listings(
         **Returns an empty list when nothing matches — an empty list, not None,
         and not an exception.** Your loop branches on this.
 
-    Each listing dict has these fields:
-        id, title, description, category, style_tags (list), size,
-        condition, price (float), colors (list), brand (str or None), platform
+    Each listing dict is the FitFindr standard listing (sources/normalize.py):
+        id, title, price (float, USD), size, platform, url, image_url,
+        plus optional condition, updated_at. Missing values are None.
 
-    Note that `brand` is None for most listings. That is deliberate and
-    realistic — thrift listings often have no brand. If something you write
-    assumes a brand is always there, you will find out in unit 4.
-
-    TODO:
-        1. Load every listing with load_listings().
-        2. Filter by max_price and by size, when each is provided.
+    How it works:
+        1. Get candidates from every source with sources.fetch_candidates().
+        2. Drop duplicates; filter by max_price and by size, when provided.
         3. Score what's left by keyword overlap with `description`.
         4. Drop anything scoring zero.
         5. Sort by score, highest first, and return the listing dicts —
@@ -78,22 +78,23 @@ def search_listings(
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    import re
-    import config
-    from utils.data_loader import load_listings
-
     def tokens(text):
-        return [t for t in re.split(r"[\s/(),]+", str(text).lower()) if t]
+        return [t for t in re.split(r"[\s/(),]+", str(text or "").lower()) if t]
 
     words = [w for w in tokens(description) if len(w) > 2]
-    results = []
-    for item in load_listings():
+    candidates, _statuses = fetch_candidates(description)
+
+    seen, results = set(), []
+    for item in candidates:
+        key = (item["platform"], item["id"])
+        if key in seen:
+            continue
+        seen.add(key)
         if max_price is not None and item["price"] > max_price:
             continue
         if size and size.lower() not in tokens(item["size"]):
             continue
-        text = " ".join([item["title"], item["description"], item["category"]]
-                        + item["style_tags"] + item["colors"]).lower()
+        text = " ".join(filter(None, [item["title"], item.get("condition")])).lower()
         score = sum(1 for w in words if w in text)
         if score > 0:
             results.append((score, item))
@@ -129,12 +130,14 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         4. Return the model's response.
 
     Test it from a terminal before you move on:
-        python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+        python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe; from tools import search_listings; print(suggest_outfit(search_listings('tee')[0], get_example_wardrobe()))"
     """
     items = wardrobe.get("items", [])
-    item_text = (f"{new_item['title']} ({new_item['category']}, "
-                 f"colors: {', '.join(new_item['colors'])}, "
-                 f"style: {', '.join(new_item['style_tags'])})")
+    details = [f"{label}: {new_item[key]}" for key, label in
+               (("size", "size"), ("condition", "condition"), ("platform", "from"))
+               if new_item.get(key)]
+    item_text = f"{new_item['title']} (${new_item['price']:.0f}"
+    item_text += f", {', '.join(details)})" if details else ")"
     if not items:
         prompt = (f"A user is thinking about buying this thrifted item: {item_text}. "
                   "They haven't shared their wardrobe. Give 1-2 general outfit "
@@ -182,7 +185,7 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         3. Call generate() and return the response.
 
     Test it from a terminal before you move on:
-        python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+        python -c "from tools import create_fit_card; from tools import search_listings; print(create_fit_card('jeans and white sneakers', search_listings('tee')[0]))"
     """
     if not outfit or not outfit.strip():
         return (f"No outfit to caption yet for {new_item.get('title', 'this item')}. "
