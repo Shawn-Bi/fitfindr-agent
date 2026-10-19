@@ -24,6 +24,7 @@ logged. Only touches the test account from .env.
 
 import argparse
 import datetime as dt
+from collections import Counter
 import os
 import sys
 from pathlib import Path
@@ -81,13 +82,13 @@ def main() -> None:
             item_prefs = {**prefs, "gender": item.get("gender") or prefs.get("gender")}
             outfits[item["id"]] = stylist.build_outfit(item, item_prefs, budget, plan=plans[item["id"]],
                                                        pool=pool, live_calls=0, cache_ok=False)
-            shown = sum(1 for p in outfits[item["id"]]["pieces"] if p["listing"])
-            print(f"built {item['name']}: {shown}/{len(outfits[item['id']]['pieces'])} pieces with a listing")
+            kinds = [p["kind"] for p in outfits[item["id"]]["pieces"]]
+            print(f"built {item['name']}: {kinds}")
         todo = []
         for rank in range(3):
             for item in closet:
                 pieces = outfits[item["id"]]["pieces"]
-                if rank < len(pieces) and not pieces[rank]["listing"]                         and pieces[rank]["search"].lower() not in searched:
+                if rank < len(pieces) and pieces[rank]["kind"] != "listing"                         and pieces[rank]["search"].lower() not in searched:
                     todo.append((item, pieces[rank]))
         if not todo or live_used >= args.live_budget:
             break
@@ -106,7 +107,7 @@ def main() -> None:
             touched.add(item["id"])
             print(f"{'live ' if was_live else 'cache'} {live_used}/{args.live_budget} “{piece['search']}” → {len(found)} listings")
         # rebuild every outfit that still has an empty piece: one search can serve several
-        pending = [it for it in closet if any(not p["listing"] for p in outfits[it["id"]]["pieces"])]
+        pending = [it for it in closet if any(p["kind"] != "listing" for p in outfits[it["id"]]["pieces"])]
         if not touched:
             break
 
@@ -118,8 +119,7 @@ def main() -> None:
                                      "outfit": outfit, "data_mode": config.DATA_MODE,
                                      "item_version": item.get("updated_at"), "error": None},
                   upsert=True, on_conflict="item_id")
-        shown = sum(1 for p in outfit["pieces"] if p["listing"])
-        print(f"saved {item['name']}: {shown}/{len(outfit['pieces'])} pieces with a listing")
+        print(f"saved {item['name']}: {[p['kind'] for p in outfit['pieces']]}")
         report.append((item, item_prefs, outfit))
 
     # 4. judge
@@ -145,11 +145,14 @@ def main() -> None:
         for p in outfit["pieces"]:
             found = p["listing"]
             lines.append(f"- **{p['label']}: {p['name']}** — {p.get('why') or ''}  ")
+            label = {"listing": "Listing", "closest": "Closest find", "ai_preview": "AI preview",
+                     "idea": "Idea tile (no picture)"}[p["kind"]]
             if found:
                 title = found["title"].splitlines()[0][:90]
-                lines.append(f"  Listing: {title} (${found['price']:.0f}, {found['platform']})")
+                lines.append(f"  {label}: {title} (${found['price']:.0f}, {found['platform']})"
+                             + (f" — {p['closest_note']}" if p.get("closest_note") else ""))
             else:
-                lines.append("  No listing truly fit — shown as a description with Search this")
+                lines.append(f"  {label}")
         if result:
             lines += ["", "Judge: " + ", ".join(f"{d} {v['score']}" for d, v in result["scores"].items())
                       + f" → **{result['avg']}**", ""]
@@ -170,15 +173,18 @@ def main() -> None:
         lines[6:6] = [f"> **Judge unavailable** after {len(scores)} outfit(s): {judge_error}", ""]
 
     spent = {m: generate.ledger().get(m, 0) - ledger_before.get(m, 0) for m in generate.ledger()}
-    shown = sum(1 for _, _, o in report for p in o["pieces"] if p["listing"])
+    kinds = Counter(p["kind"] for _, _, o in report for p in o["pieces"])
+    shown = kinds["listing"]
     total = sum(len(o["pieces"]) for _, _, o in report)
     lines += ["## Cost", "", f"- Live RapidAPI searches: {live_used}"
               + (f" (resale counter {resale_before} → {quota.count('RESALE_API_HOST')})" if resale_before is not None else ""),
               f"- Model calls: { {m: n for m, n in spent.items() if n} }",
-              f"- Pieces with a real listing: {shown} of {total}", ""]
+              f"- Pieces with a real listing: {shown} of {total}",
+              f"- Pictures: {kinds['listing']} listing, {kinds['closest']} closest find, "
+              f"{kinds['ai_preview']} AI preview, {kinds['idea']} without a picture", ""]
     out = config.RESULTS_DIR / f"stylist_eval_{dt.datetime.now().strftime('%Y-%m-%d_%H%M')}.md"
     out.write_text(config.redact("\n".join(lines)), encoding="utf-8")
-    print(f"wrote {out.relative_to(config.ROOT)} · live {live_used} · model calls {spent} · listings {shown}/{total}")
+    print(f"wrote {out.relative_to(config.ROOT)} · live {live_used} · model calls {spent} · kinds {dict(kinds)}")
 
 
 if __name__ == "__main__":

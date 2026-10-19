@@ -311,6 +311,14 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     parsed = {**parsed, **{k: session["parsed"].get(k) for k in ("size", "max_price")}}
     if session["relaxed"]:
         chips = _relaxed_chips(chips, parsed, session["relaxed"])
+    broadened = found.get("broadened")
+    if broadened and found.get("results"):   # the chips show what the results were found with
+        if broadened["dropped_size"]:
+            parsed = {**parsed, "size": None}
+            chips = _relaxed_chips(chips, parsed, {"dropped": "size"})
+        if broadened["max_price"] is not None:
+            parsed = {**parsed, "max_price": broadened["max_price"]}
+            chips = _relaxed_chips(chips, parsed, {"dropped": "budget"})
 
     results = list(found.get("results", []))
     chosen = session["selected_item"]

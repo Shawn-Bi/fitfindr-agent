@@ -1,7 +1,8 @@
 # Render blueprint for the FitFindr API. Prepared, not deployed — see docs/DEPLOY.md.
 #
 # Production runs live: APP_ENV=production refuses to start with fixtures, and
-# every RapidAPI call is counted in Supabase api_usage and stops at 40/month/host.
+# every RapidAPI call is counted in Supabase api_usage and stops at 40/month/host
+# (Fashion Resale = Depop/Poshmark/Mercari/eBay, Etsy, FB Marketplace).
 # Values marked `sync: false` are secrets or per-deploy URLs: Render asks for them
 # when you create the Blueprint, and they are never stored in this file.
 services:
@@ -28,6 +29,10 @@ services:
         value: gemini
       - key: FITFINDR_STYLIST_LIVE_CALLS   # live searches one closet-item outfit may make (B2)
         value: "1"
+      - key: FITFINDR_BROADEN_LIVE_FETCHES # extra live searches when a search has < 4 results
+        value: "1"
+      - key: FITFINDR_IMAGE_MODEL          # "AI preview" outfit pictures; free tier has no image quota
+        value: gemini-2.5-flash-image
       - key: FRONTEND_ORIGINS          # the Vercel URL, e.g. https://fitfindr.vercel.app (no trailing /)
         sync: false
       - key: FRONTEND_ORIGIN_REGEX     # optional: Vercel preview URLs, e.g. ^https://fitfindr(-[a-z0-9-]+)?\.vercel\.app$

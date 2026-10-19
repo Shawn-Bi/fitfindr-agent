@@ -51,9 +51,9 @@ test.describe("guest (v2)", () => {
     await expect(page.getByText("Best match", { exact: true })).toBeVisible({ timeout: 60_000 });
   });
 
-  test("a size nothing matches is relaxed once and the user is told (A1)", async ({ page }) => {
+  test("a size nothing matches is dropped and the user is told in one line (A1)", async ({ page }) => {
     await page.goto(`/search?q=${encodeURIComponent("denim jacket size XXS under $50")}`);
-    await expect(page.getByText("Nothing matched in size XXS, so I searched every size.")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("status").filter({ hasText: /searched every size/ })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("Best match", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Remove filter size/ })).toHaveCount(0);
     await shot(page, "relaxed");
@@ -72,32 +72,59 @@ test.describe("guest (v2)", () => {
     await noHorizontalScroll(page);
   });
 
-  test("filters: phone sheet / desktop chips; location disabled with the reason (B4)", async ({ page }) => {
+  test("filters apply instantly: phone sheet / desktop chips; location is FB-only (B4)", async ({ page }) => {
     await page.goto(`/search?q=${encodeURIComponent("vintage graphic tee")}`);
     await expect(page.getByText("Best match", { exact: true })).toBeVisible({ timeout: 60_000 });
     if (isDesktop(page)) {
       const bar = page.getByRole("group", { name: "Filters" });
-      await expect(bar.getByRole("button", { name: /Location/ })).toBeDisabled();
-      await expect(page.locator("span", { hasText: "Location: Not available for these stores." }).last()).toBeVisible();
+      await expect(bar.getByRole("button", { name: /Location.*Facebook Marketplace/ })).toBeDisabled();
       await bar.getByRole("button", { name: /^Store/ }).click();
-      await page.getByRole("dialog", { name: "Store filter" }).getByRole("button", { name: "Depop" }).click();
+      const dialog = page.getByRole("dialog", { name: "Store filter" });
+      await expect(dialog.getByRole("button", { name: "Etsy" })).toBeEnabled();
+      await dialog.getByRole("button", { name: "Depop" }).click();
+      // no Apply button: the URL and the results change at once
+      await expect(page).toHaveURL(/stores=depop/);
+      await expect(dialog.getByText(/\d+ results?/)).toBeVisible({ timeout: 60_000 });
       await shot(page, "filters-open");
-      await page.getByRole("button", { name: "Apply" }).click();
+      await dialog.getByRole("button", { name: "Done" }).click();
     } else {
       await page.getByRole("button", { name: /^Filters/ }).click();
       const sheet = page.getByRole("dialog", { name: "Filters" });
       await expect(sheet).toBeVisible();
-      await expect(sheet.getByText("Not available for these stores.")).toBeVisible();
-      await expect(sheet.locator("select")).toBeDisabled();
+      await expect(sheet.getByText("Location is for Facebook Marketplace, which isn't connected yet.")).toBeVisible();
+      await expect(sheet.getByRole("textbox", { name: /ZIP or city/ })).toBeDisabled();
       await sheet.getByRole("button", { name: "Depop" }).click();
+      await expect(page).toHaveURL(/stores=depop/);
+      const show = sheet.getByRole("button", { name: /^Show \d+ results?$/ });
+      await expect(show).toBeVisible({ timeout: 60_000 });
       await shot(page, "filters-open");
       await noHorizontalScroll(page);
-      await sheet.getByRole("button", { name: "Show results" }).click();
+      await show.click();
     }
+    await expect(page.getByText("Best match", { exact: true })).toBeVisible({ timeout: 60_000 });
+    const stores = await page.locator("article").getByText(/Depop|eBay|Poshmark|Mercari|Etsy/).allInnerTexts();
+    expect(stores.join(" ")).not.toMatch(/eBay|Poshmark|Mercari|Etsy/);
+    // a refresh keeps the filter
+    await page.reload();
     await expect(page).toHaveURL(/stores=depop/);
     await expect(page.getByText("Best match", { exact: true })).toBeVisible({ timeout: 60_000 });
-    const stores = await page.locator("article").getByText(/Depop|eBay|Poshmark|Mercari/).allInnerTexts();
-    expect(stores.join(" ")).not.toMatch(/eBay|Poshmark|Mercari/);
+    await noHorizontalScroll(page);
+  });
+
+  test("removing a chip updates the results at once (B4)", async ({ page }) => {
+    await page.goto(`/search?q=${encodeURIComponent("flannel shirt under $40")}`);
+    await expect(page.getByText("Best match", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Remove filter under $40" }).click();
+    await expect(page).toHaveURL(/no_price=1/);
+    await expect(page.getByRole("button", { name: "Remove filter under $40" })).toHaveCount(0, { timeout: 60_000 });
+    await expect(page.getByText("Best match", { exact: true })).toBeVisible();
+  });
+
+  test("size guide (B3)", async ({ page }) => {
+    await page.goto("/size-guide");
+    await expect(page.getByRole("heading", { name: "Size guide (US)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tops & dresses" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dress shirts" })).toBeVisible();
     await noHorizontalScroll(page);
   });
 });
@@ -113,7 +140,19 @@ test.describe("signed in (v2)", () => {
     for (const h of ["Your sizes (US)", "Body measurements (optional)", "Fit preference", "Styles you like", "Colours you wear most", "Budget per item"]) {
       await expect(page.getByRole("heading", { name: h })).toBeVisible();
     }
-    await expect(page.getByRole("heading", { name: "Dresses" })).toBeVisible();
+    // US retail sizes for Women: size range tabs, compact groups, a size guide
+    for (const r of ["Regular", "Petite", "Plus"]) await expect(page.getByRole("radio", { name: r })).toBeVisible();
+    await expect(page.getByText("Tops & dresses", { exact: true })).toBeVisible();
+    await expect(page.getByText("Jeans · waist", { exact: true })).toBeVisible();
+    await expect(page.getByText("Shoes · US women's", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Size guide" })).toBeVisible();
+    await expect(page.getByText("Dress shirts", { exact: true })).toHaveCount(0);
+    await page.getByRole("radio", { name: "Plus" }).click();
+    // a group with sizes picked starts folded, showing the picks; open it
+    await page.locator("details", { hasText: "Tops & dresses" }).evaluate((d) => ((d as HTMLDetailsElement).open = true));
+    await expect(page.getByRole("button", { name: "1X", exact: true })).toBeVisible();
+    await page.getByRole("radio", { name: "Regular" }).click();
+    await expect(page.getByRole("heading", { name: "Your area" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Quiet luxury / old money" })).toBeVisible();
     await expect(page.getByRole("button", { name: "burgundy" })).toBeVisible();
     await expect(page.getByRole("spinbutton", { name: "Min", exact: true })).toHaveValue("10");
@@ -129,24 +168,30 @@ test.describe("signed in (v2)", () => {
         .evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().top))).size);
       expect(tops).toBe(1);
     }
-    // Men hides dresses (not saved)
+    // Men shows the men's groups instead (not saved)
     await page.getByRole("button", { name: "Men", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Dresses" })).toHaveCount(0);
+    await expect(page.getByText("Dress shirts", { exact: true })).toBeVisible();
+    await expect(page.getByText("Tops & dresses", { exact: true })).toHaveCount(0);
+    await noHorizontalScroll(page);
   });
 
-  test("closet item detail shows the stylist's outfit with a collage (B2, A5)", async ({ page }) => {
+  test("closet item detail shows the outfit as one set of picture cards (B2, P8)", async ({ page }) => {
     await logIn(page);
     await page.goto("/closet");
     await page.getByRole("link", { name: "Grey pleated midi skirt" }).first().click();
     await expect(page.getByRole("heading", { name: "Finds that go with this" })).toBeVisible();
-    await expect(page.getByText("Styled for you")).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByRole("group", { name: /Outfit collage/ })).toBeVisible();
-    const pieces = page.locator("article ul > li");
-    expect(await pieces.count()).toBeGreaterThanOrEqual(2);
-    // every piece is either a real listing (View on …) or a "Search this" description
-    const views = await page.getByRole("link", { name: /^View on / }).count();
-    const searches = await page.getByRole("link", { name: "Search this" }).count();
-    expect(views + searches).toBe(await pieces.count());
+    await expect(page.getByText("Styled for you")).toBeVisible({ timeout: 120_000 });
+    const cards = page.getByRole("list", { name: /^Your Grey pleated midi skirt with/ });
+    await expect(cards).toBeVisible();
+    const pieces = (await cards.locator(":scope > li").count()) - 1; // the first card is your own piece
+    expect(pieces).toBeGreaterThanOrEqual(2);
+    // every card has a picture, and each piece has either View on … (a listing) or Search this
+    expect(await cards.locator(":scope > li img").count()).toBe(pieces + 1);
+    const views = await cards.getByRole("link", { name: /^View on / }).count();
+    const searches = await cards.getByRole("link", { name: "Search this" }).count();
+    expect(views + searches).toBe(pieces);
+    // no separate text-only piece list any more
+    await expect(page.getByRole("group", { name: /Outfit collage/ })).toHaveCount(0);
     await shot(page, "item-outfit");
     await noHorizontalScroll(page);
   });

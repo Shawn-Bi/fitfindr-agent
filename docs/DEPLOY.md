@@ -28,7 +28,8 @@ cd backend; .venv\Scripts\Activate.ps1; $env:PYTHONUTF8=1
 python scripts/migrate.py --status
 ```
 
-Every line should say `applied`. If any says `pending`, run
+Every line should say `applied` (0001 to 0005; `0005_profile_location.sql`
+adds the profile's ZIP/city). If any says `pending`, run
 `python scripts/migrate.py` (it applies them and prints `APPLIED …`).
 
 ---
@@ -49,15 +50,22 @@ Every line should say `applied`. If any says `pending`, run
    | `GEMINI_API_KEY` | from `.env` |
    | `RAPIDAPI_KEY` | from `.env` |
    | `RESALE_API_HOST` | from `.env` (fashion-resale-api.p.rapidapi.com) |
-   | `ETSY_API_HOST` | from `.env` |
-   | `FB_MARKETPLACE_HOST` | from `.env` |
+   | `ETSY_API_HOST` | from `.env` (etsy-api2.p.rapidapi.com) — Etsy is live |
+   | `FB_MARKETPLACE_HOST` | from `.env` (facebook-marketplace-api.p.rapidapi.com) — stays "Coming soon" until you subscribe, see `BLOCKERS.md` |
    | `SUPABASE_URL` | from `.env` |
    | `SUPABASE_ANON_KEY` | from `.env` |
    | `SUPABASE_SERVICE_ROLE_KEY` | from `.env` — the secret one, backend only |
 
    These are already set by `render.yaml`, don't change them: `APP_ENV=production`,
    `FITFINDR_DATA_MODE=live`, `FITFINDR_PLANNER=gemini`,
-   `FITFINDR_STYLIST_LIVE_CALLS=1`, `PYTHON_VERSION`, `PYTHONUTF8`.
+   `FITFINDR_STYLIST_LIVE_CALLS=1`, `FITFINDR_BROADEN_LIVE_FETCHES=1` (a search
+   with fewer than 4 results may make one extra store search per host),
+   `FITFINDR_IMAGE_MODEL` ("AI preview" outfit pictures; on the free Gemini tier
+   it has no quota and the app shows the closest real listing photo instead),
+   `PYTHON_VERSION`, `PYTHONUTF8`.
+
+   AI preview pictures are stored in the existing private `closet-photos`
+   bucket under `ai-previews/`; nothing to set up.
 
    Do **not** add `TEST_USER_EMAIL`, `TEST_USER_PASSWORD` or `SUPABASE_DB_URL`
    to Render; the website doesn't use them.
@@ -118,18 +126,26 @@ dashboard → your project → **Authentication** → **URL Configuration**:
 
 ## 5. Smoke test (5 minutes)
 
-1. Open the Vercel URL → search **vintage graphic tee under $30** from the
-   landing page. Results show with photos and no "Development mode" note.
-   (This is one live RapidAPI call; identical searches in the next 24 h are free.)
-2. Sign up with a real email → confirm from the email → you land on
+1. Open the Vercel URL. The landing page says **5 stores live** and
+   "FB Marketplace (coming soon)". Search **vintage graphic tee under $30**.
+   Results show with photos (Etsy among the stores) and no "Development mode"
+   note. (This is one live call per host, Fashion Resale and Etsy; identical
+   searches in the next 24 h are free.)
+2. On the results, open **Filters** and tap **Depop**: the results change at
+   once, with no Apply button, and the URL gains `stores=depop`.
+3. Sign up with a real email → confirm from the email → you land on
    onboarding. Fill in "Shopping for" and save.
-3. Add a closet item with a photo → the fields fill in with "AI suggested"
-   badges → save → the item page shows "Styling your piece…" and then an outfit.
-4. Open `…onrender.com/dev/traces` in a browser: it must say **Not found** in
+4. Add a closet item with a photo → the fields fill in with "AI suggested"
+   badges → save → the item page shows "Styling your piece…" and then an outfit
+   where every piece has a picture (a listing, "Closest find" or "AI preview").
+5. Open `…onrender.com/dev/traces` in a browser: it must say **Not found** in
    production (traces are dev-only).
 
 **RapidAPI quota:** each store host stops itself at 40 calls a month and shows
-"Paused until …". Check the count any time with
+"Paused until …". After the v2 fixes on Oct 19 the October counts are
+Fashion Resale 34/40 (see `docs/V2_REPORT.md`), Etsy 3/40, FB Marketplace 1/40,
+so October has only a few new searches left; the cache keeps repeat searches free
+and November starts at 0. Check the count any time with
 `python -m sources.quota` in `backend` (with `.env` loaded).
 
 ## If something goes wrong

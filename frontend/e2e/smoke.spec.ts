@@ -29,8 +29,8 @@ test.describe("guest", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Find pieces that fit your wardrobe, not just your search.",
     );
-    await expect(page.getByText("4 stores live:")).toBeVisible();
-    await expect(page.getByText("Etsy (coming soon)")).toBeVisible();
+    await expect(page.getByText("5 stores live:")).toBeVisible();
+    await expect(page.getByText("FB Marketplace (coming soon)")).toBeVisible();
     await noHorizontalScroll(page);
   });
 
@@ -65,9 +65,9 @@ test.describe("guest", () => {
     if (isDesktop(page)) {
       const stores = page.getByRole("group", { name: /Stores/ });
       await expect(stores.getByText("coming soon").first()).toBeVisible();
-      await expect(stores.getByRole("checkbox", { name: /Etsy/ })).toBeDisabled();
+      await expect(stores.getByRole("checkbox", { name: /FB Marketplace/ })).toBeDisabled();
     } else {
-      await expect(page.getByText("Etsy · coming soon")).toBeVisible();
+      await expect(page.getByText("FB Marketplace · coming soon")).toBeVisible();
     }
     // every price shown is within the budget
     const prices = await page.locator("article").getByText(/^\$\d+(\.\d+)?$/).allInnerTexts();
@@ -78,7 +78,8 @@ test.describe("guest", () => {
 
   test("empty search relaxes the size itself, then offers a bigger budget", async ({ page }) => {
     await page.goto(`/search?q=${encodeURIComponent("designer ballgown size XXS under $5")}`);
-    await expect(page.getByText("No matches yet")).toBeVisible({ timeout: 60_000 });
+    // fixtures mode (tests): the empty state says the recorded data doesn't cover this search
+    await expect(page.getByText("Development data doesn't include this search")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("Nothing matched in size XXS, so I searched every size.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Raise budget to $10" })).toBeVisible();
     await page.getByRole("button", { name: "Raise budget to $10" }).click();
