@@ -30,6 +30,7 @@ import re
 import attributes
 import config
 import generate
+from generate import loads_json
 import ranking
 from sources import fetch_candidates, recent_pool
 from tools import is_kids_item
@@ -129,7 +130,7 @@ def parse_plan(raw: str, item: dict, gender: str | None) -> dict | None:
     """Model JSON → a checked plan, or None if fewer than 2 usable pieces."""
     cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
     try:
-        data = json.loads(cleaned)
+        data = loads_json(cleaned)
     except (json.JSONDecodeError, TypeError):
         return None
     if not isinstance(data, dict):
@@ -241,13 +242,17 @@ def candidates(piece: dict, pool: list[dict], gender: str | None, budget: tuple,
     return [{**ok[i], "_sim": round(s, 4)} for s, i in scored[:MAX_CANDIDATES]]
 
 
-def live_search(query: str, budget: tuple) -> list[dict]:
-    """One counted live search (cached for 24 h). Returns [] in fixtures mode or when paused."""
+def live_search(query: str, budget: tuple) -> tuple[list[dict], bool]:
+    """
+    (listings, made_a_live_call) for one store search. The ≤ 24 h cache answers
+    first; otherwise one counted live call. ([], False) in fixtures mode or
+    when the store is paused.
+    """
     if config.DATA_MODE != "live":
-        return []
+        return [], False
     low, high = budget
-    listings, _ = fetch_candidates(query, max_price=high, min_price=low)
-    return listings
+    listings, statuses = fetch_candidates(query, max_price=high, min_price=low)
+    return listings, any(s["status"] == "active" for s in statuses)
 
 
 # ── 3. The final pick ────────────────────────────────────────────────────────
@@ -255,9 +260,11 @@ def live_search(query: str, budget: tuple) -> list[dict]:
 def pick_prompt(item: dict, plan: dict, options: list[list[dict]], gender: str | None) -> str:
     lines = [f"A stylist planned an outfit around the client's {_item_line(item)}.",
              f"Client shops {_gender_word(gender) or 'any'} clothing. Plan: {plan.get('concept') or plan['title']}.",
-             "For each planned piece, choose the ONE listing that truly is that piece (right type, "
-             "colour family, fabric if stated, cut for the client) — or null if none truly fits. "
-             "A wrong item is worse than none.\n"]
+             "For each planned piece, choose the ONE listing that best stands in for it, or null if "
+             "none fits. Required: the same type of garment (trousers for trousers, loafers for "
+             "loafers), the same colour family, and cut for the client. Preferred, not required: the "
+             "exact fabric and details. Loungewear, kids' sizes or a different garment never fit — a "
+             "wrong item is worse than none.\n"]
     for n, (piece, cands) in enumerate(zip(plan["pieces"], options)):
         lines.append(f"Piece {n}: {piece['name']} ({piece['label']})")
         for i, c in enumerate(cands):
@@ -277,7 +284,7 @@ def pick_listings(item: dict, plan: dict, options: list[list[dict]], gender: str
     try:
         raw = generate.generate(pick_prompt(item, plan, options, gender), json_mode=True,
                                 temperature=0.0, cache=cache_ok)
-        data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip())
+        data = loads_json(raw)
         choices = {int(c.get("piece")): c for c in data.get("choices") or [] if isinstance(c, dict)}
     except Exception:  # noqa: BLE001
         return [(None, None)] * len(options)
@@ -322,7 +329,7 @@ def build_outfit(item: dict, prefs: dict, budget: tuple = (None, None), *, live_
             if not found and live_used < live_calls:
                 live_used += 1
                 try:
-                    pool.extend(live_search(piece["search"], budget))
+                    pool.extend(live_search(piece["search"], budget)[0])
                 except Exception:  # noqa: BLE001 — a paused or failing store just means no listing
                     pass
                 found = candidates(piece, pool, gender, budget, patient=patient)

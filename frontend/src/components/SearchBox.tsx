@@ -12,12 +12,15 @@ export function SearchBox({
   variant = "phone",
   label = "Search secondhand",
   autoFocus = false,
+  extraQuery = "",
 }: {
   initial?: string;
   placeholder?: string;
   variant?: "phone" | "desktop" | "landing";
   label?: string;
   autoFocus?: boolean;
+  /** Filter params (B4) to carry into the search, e.g. "min=10&max=40". */
+  extraQuery?: string;
 }) {
   const router = useRouter();
   const id = useId();
@@ -27,7 +30,7 @@ export function SearchBox({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const text = q.trim() || placeholder;
-    router.push(`/search?q=${encodeURIComponent(text)}`);
+    router.push(`/search?q=${encodeURIComponent(text)}${extraQuery ? `&${extraQuery}` : ""}`);
   }
 
   const desktop = variant === "desktop";

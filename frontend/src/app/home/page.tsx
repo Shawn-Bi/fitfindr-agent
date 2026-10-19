@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PhotoSearchButton } from "@/components/ComingSoon";
+import { FilterBar } from "@/components/FilterBar";
 import { ListingCard } from "@/components/ListingCard";
 import { LogoMark } from "@/components/Logo";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -11,8 +12,9 @@ import { SearchBox } from "@/components/SearchBox";
 import { ErrorBox, SkeletonGrid } from "@/components/States";
 import { StoreBar } from "@/components/StoreBar";
 import { api, ApiError } from "@/lib/api";
+import { EMPTY_FILTERS, filtersToParams } from "@/lib/filters";
 import { STYLE_COLORS, STYLES } from "@/lib/format";
-import type { Pick } from "@/lib/types";
+import type { Pick, Profile, SearchFilters } from "@/lib/types";
 
 interface HomeData {
   locked: boolean;
@@ -25,6 +27,31 @@ interface HomeData {
 function Home() {
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
+  const [touched, setTouched] = useState(false);
+
+  // Pre-fill the filters from the profile (B4); sizes stay per category, so the search fills them in.
+  useEffect(() => {
+    api<Profile>("/profile")
+      .then((p) =>
+        setFilters((f) => ({
+          ...f,
+          min_price: p.budget_min,
+          max_price: p.budget,
+          gender: p.gender === "women" || p.gender === "men" ? p.gender : null,
+        })),
+      )
+      .catch(() => undefined);
+  }, []);
+
+  /** Only filters the user changed go into the URL; the backend applies the profile itself. */
+  const extraQuery = useMemo(() => {
+    if (!touched) return "";
+    const params = filtersToParams(filters);
+    if (filters.min_price == null && filters.max_price == null) params.set("no_price", "1");
+    if (filters.sizes != null && filters.sizes.length === 0) params.set("no_size", "1");
+    return params.toString();
+  }, [filters, touched]);
 
   const load = useCallback(() => {
     setError(null);
@@ -42,15 +69,33 @@ function Home() {
           <Link href="/home" aria-label="FitFindr home" className="flex shrink-0">
             <LogoMark size={38} />
           </Link>
-          <SearchBox />
+          <SearchBox extraQuery={extraQuery} />
           <PhotoSearchButton />
         </header>
+        <div className="px-4 pb-1 md:hidden">
+          <FilterBar
+            value={filters}
+            onApply={(f) => {
+              setFilters(f);
+              setTouched(true);
+            }}
+            fromProfile={!touched && (filters.max_price != null || !!filters.gender)}
+          />
+        </div>
         <section className="hidden flex-col gap-3 pt-10 md:flex">
           <h1 className="m-0 font-heading text-[34px] font-bold tracking-[-0.8px]">What are you looking for?</h1>
           <div className="flex max-w-[760px] items-center gap-2.5">
-            <SearchBox placeholder="vintage white shirt under $30" autoFocus />
+            <SearchBox placeholder="vintage white shirt under $30" autoFocus extraQuery={extraQuery} />
             <PhotoSearchButton />
           </div>
+          <FilterBar
+            value={filters}
+            onApply={(f) => {
+              setFilters(f);
+              setTouched(true);
+            }}
+            fromProfile={!touched && (filters.max_price != null || !!filters.gender)}
+          />
         </section>
         <StoreBar className="px-4 pt-1 md:px-0 md:pt-3" />
 
@@ -62,7 +107,7 @@ function Home() {
             {STYLES.map((s) => (
               <Link
                 key={s}
-                href={`/search?q=${encodeURIComponent(s.toLowerCase())}`}
+                href={`/search?q=${encodeURIComponent(s.toLowerCase())}${extraQuery ? `&${extraQuery}` : ""}`}
                 style={{ background: STYLE_COLORS[s] }}
                 className="flex h-[132px] w-28 shrink-0 items-end rounded-2xl p-3 font-heading text-[17px] font-bold text-white no-underline hover:text-white hover:brightness-110 md:h-[150px] md:w-auto"
               >

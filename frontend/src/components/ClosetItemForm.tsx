@@ -3,15 +3,22 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { CATEGORIES, COLOR_SWATCHES } from "@/lib/format";
-import type { Category, ClosetItem } from "@/lib/types";
+import type { AutoTagSuggestion, Category, ClosetItem } from "@/lib/types";
 import { FormMessage, PrimaryButton } from "./AuthForm";
+import { AiBadge, Swatch, ToggleChip } from "./Chips";
 import { CameraIcon } from "./Icons";
-import { Swatch, ToggleChip } from "./ProfileForm";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/heic,image/heif,.heic,.heif,.jpg,.jpeg,.png";
 const TAGS = ["vintage", "streetwear", "minimalist", "y2k", "grunge", "cottagecore", "denim", "baggy", "fitted", "oversized", "knit", "leather"];
 const SEASONS = ["spring", "summer", "fall", "winter"];
+const GENDERS = [
+  { key: "women", label: "Women" },
+  { key: "men", label: "Men" },
+  { key: "unisex", label: "Unisex" },
+] as const;
+type ItemGender = (typeof GENDERS)[number]["key"];
+type AiField = "name" | "category" | "colors" | "tags" | "season" | "gender";
 
 function checkFile(file: File): string | null {
   const name = file.name.toLowerCase();
@@ -25,12 +32,13 @@ function toggle(list: string[], value: string) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-function Field({ label, children, required, error, hint }: {
+function Field({ label, children, required, error, hint, ai }: {
   label: string;
   children: (id: string) => React.ReactNode;
   required?: boolean;
   error?: string;
   hint?: string;
+  ai?: boolean;
 }) {
   const id = useId();
   return (
@@ -38,6 +46,7 @@ function Field({ label, children, required, error, hint }: {
       <label htmlFor={id} className="text-sm font-bold">
         {label} {required && <span className="text-danger" aria-hidden="true">*</span>}
         {required && <span className="sr-only">(required)</span>}
+        {ai && <AiBadge />}
       </label>
       {children(id)}
       {hint && <div className="text-xs text-muted">{hint}</div>}
@@ -62,6 +71,10 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
   const [brand, setBrand] = useState(item?.brand || "");
   const [season, setSeason] = useState<string[]>(item?.season || []);
   const [notes, setNotes] = useState(item?.notes || "");
+  const [gender, setGender] = useState<ItemGender | "">(item?.gender || "");
+  const [ai, setAi] = useState<Set<AiField>>(new Set());
+  const [tagging, setTagging] = useState(false);
+  const [tagNote, setTagNote] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -86,6 +99,62 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
     }
     setErrors({ ...errors, photo: "" });
     setFile(f);
+    if (!item) void autotag(f);
+  }
+
+  /** A3: the model reads the photo and pre-fills the details; everything stays editable. */
+  async function autotag(f: File) {
+    setTagging(true);
+    setTagNote(null);
+    try {
+      const form = new FormData();
+      form.append("photo", f);
+      const res = await api<{ suggestion: AutoTagSuggestion | null; message: string | null }>("/closet/autotag", { form });
+      const sg = res.suggestion;
+      if (!sg) {
+        setTagNote(res.message);
+        return;
+      }
+      const filled = new Set<AiField>();
+      if (sg.name) {
+        setName(sg.name);
+        filled.add("name");
+      }
+      if (sg.category) {
+        setCategory(sg.category);
+        filled.add("category");
+      }
+      if (sg.colors.length) {
+        setColors(sg.colors);
+        filled.add("colors");
+      }
+      if (sg.style_tags.length) {
+        setTags(sg.style_tags);
+        filled.add("tags");
+      }
+      if (sg.season.length) {
+        setSeason(sg.season);
+        filled.add("season");
+      }
+      if (sg.gender) {
+        setGender(sg.gender);
+        filled.add("gender");
+      }
+      setAi(filled);
+      setTagNote(filled.size ? "We filled in what we could see. Check each field and change anything that's off." : null);
+    } catch (err) {
+      setTagNote(err instanceof ApiError ? err.message : "We couldn't read the photo. Fill in the details yourself.");
+    } finally {
+      setTagging(false);
+    }
+  }
+
+  /** Editing a field makes it the user's own: its AI badge goes. */
+  function own(field: AiField) {
+    if (!ai.has(field)) return;
+    const next = new Set(ai);
+    next.delete(field);
+    setAi(next);
   }
 
   function addTag() {
@@ -106,7 +175,7 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
       document.querySelector<HTMLElement>("[data-error='true']")?.scrollIntoView({ block: "center" });
       return;
     }
-    const fields = { name: name.trim(), category, colors, style_tags: tags, size, brand, season, notes };
+    const fields = { name: name.trim(), category, colors, style_tags: tags, size, brand, season, notes, gender: gender || null };
     setBusy(true);
     try {
       let saved: ClosetItem;
@@ -187,17 +256,31 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
             {errors.photo}
           </div>
         )}
+        {tagging && (
+          <div role="status" className="flex items-center gap-2 rounded-xl bg-tint p-3 text-sm">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-primary" aria-hidden="true" />
+            Reading your photo to fill in the details…
+          </div>
+        )}
+        {tagNote && !tagging && (
+          <div role="status" className="rounded-xl bg-tint p-3 text-sm">
+            {tagNote}
+          </div>
+        )}
       </section>
 
       <div data-error={!!errors.name}>
-        <Field label="Name" required error={errors.name}>
+        <Field label="Name" required error={errors.name} ai={ai.has("name")}>
           {(id) => (
             <input
               id={id}
               className={inputCls}
               value={name}
               maxLength={80}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                own("name");
+              }}
               placeholder="Baggy straight-leg jeans"
             />
           )}
@@ -208,10 +291,18 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
         <legend className="mb-2 p-0 text-sm font-bold">
           Category <span className="text-danger" aria-hidden="true">*</span>
           <span className="sr-only">(required)</span>
+          {ai.has("category") && <AiBadge />}
         </legend>
         <div className="flex flex-wrap gap-2">
           {CATEGORIES.map((c) => (
-            <ToggleChip key={c.key} pressed={category === c.key} onClick={() => setCategory(c.key)}>
+            <ToggleChip
+              key={c.key}
+              pressed={category === c.key}
+              onClick={() => {
+                setCategory(c.key);
+                own("category");
+              }}
+            >
               {c.label}
             </ToggleChip>
           ))}
@@ -223,10 +314,19 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
         <legend className="mb-2 p-0 text-sm font-bold">
           Colors <span className="text-danger" aria-hidden="true">*</span>
           <span className="sr-only">(required, pick one or more)</span>
+          {ai.has("colors") && <AiBadge />}
         </legend>
         <div className="flex flex-wrap gap-2.5">
           {COLOR_SWATCHES.map((c) => (
-            <Swatch key={c.name} {...c} selected={colors.includes(c.name)} onClick={() => setColors(toggle(colors, c.name))} />
+            <Swatch
+              key={c.name}
+              {...c}
+              selected={colors.includes(c.name)}
+              onClick={() => {
+                setColors(toggle(colors, c.name));
+                own("colors");
+              }}
+            />
           ))}
           {extraColors.map((c) => (
             <ToggleChip key={c} pressed={colors.includes(c)} onClick={() => setColors(toggle(colors, c))}>
@@ -241,10 +341,17 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
       </fieldset>
 
       <fieldset className="m-0 border-0 p-0">
-        <legend className="mb-2 p-0 text-sm font-bold">Style tags</legend>
+        <legend className="mb-2 p-0 text-sm font-bold">Style tags {ai.has("tags") && <AiBadge />}</legend>
         <div className="flex flex-wrap gap-2">
           {[...TAGS, ...tags.filter((t) => !TAGS.includes(t))].map((t) => (
-            <ToggleChip key={t} pressed={tags.includes(t)} onClick={() => setTags(toggle(tags, t))}>
+            <ToggleChip
+              key={t}
+              pressed={tags.includes(t)}
+              onClick={() => {
+                setTags(toggle(tags, t));
+                own("tags");
+              }}
+            >
               {t}
             </ToggleChip>
           ))}
@@ -283,13 +390,41 @@ export function ClosetItemForm({ item, onSaved }: { item?: ClosetItem; onSaved: 
       </div>
 
       <fieldset className="m-0 border-0 p-0">
-        <legend className="mb-2 p-0 text-sm font-bold">Season</legend>
+        <legend className="mb-2 p-0 text-sm font-bold">Season {ai.has("season") && <AiBadge />}</legend>
         <div className="flex flex-wrap gap-2">
           {SEASONS.map((s) => (
-            <ToggleChip key={s} pressed={season.includes(s)} onClick={() => setSeason(toggle(season, s))}>
+            <ToggleChip
+              key={s}
+              pressed={season.includes(s)}
+              onClick={() => {
+                setSeason(toggle(season, s));
+                own("season");
+              }}
+            >
               {s}
             </ToggleChip>
           ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="mb-2 p-0 text-sm font-bold">Cut for {ai.has("gender") && <AiBadge />}</legend>
+        <div className="flex flex-wrap gap-2">
+          {GENDERS.map((g) => (
+            <ToggleChip
+              key={g.key}
+              pressed={gender === g.key}
+              onClick={() => {
+                setGender(gender === g.key ? "" : g.key);
+                own("gender");
+              }}
+            >
+              {g.label}
+            </ToggleChip>
+          ))}
+        </div>
+        <div className="mt-1.5 text-xs text-muted">
+          The stylist only suggests finds cut the same way. Left empty, your profile decides.
         </div>
       </fieldset>
 

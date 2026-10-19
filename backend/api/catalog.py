@@ -104,7 +104,7 @@ def resolve_filters(q: str, profile: dict | None, *, no_size: bool = False,
     """
     Returns (parsed, chips).
     parsed: {"description", "size", "sizes", "max_price", "min_price",
-             "size_from_profile"} for the agent and the search.
+             "size_from_profile", "size_lenient"} for the agent and the search.
     chips:  [{"key": "q"|"size"|"price", "label", "from_profile"}] for the UI.
     The profile's sizes and budget range fill in what the query didn't say
     (DECISIONS.md #15); explicit filters (B4) beat both.
@@ -137,6 +137,10 @@ def resolve_filters(q: str, profile: dict | None, *, no_size: bool = False,
         parsed["min_price"] = float(profile["budget_min"]) if profile.get("budget_min") else None
         price_from_profile = True
     parsed["size_from_profile"] = size_from_profile
+    # Sizes from the profile or the Size filter also keep listings whose store
+    # states no size (eBay never does), after the matches; a size typed in the
+    # query ("size M") is strict.
+    parsed["size_lenient"] = size_from_profile or (sizes is not None and bool(parsed["sizes"]))
 
     chips = []
     if parsed["description"]:

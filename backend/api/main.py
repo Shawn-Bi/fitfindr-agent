@@ -62,6 +62,7 @@ app = FastAPI(title="FitFindr API", version="1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.FRONTEND_ORIGINS,
+    allow_origin_regex=config.FRONTEND_ORIGIN_REGEX,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
@@ -272,7 +273,7 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     def direct_search(description, size, max_price):
         results, statuses = search_with_status(
             description, None, max_price, wardrobe=wardrobe, limit=config.WEB_RESULT_LIMIT,
-            keep_unsized=parsed["size_from_profile"], sizes=parsed["sizes"] if size else None,
+            keep_unsized=parsed["size_lenient"], sizes=parsed["sizes"] if size else None,
             min_price=parsed["min_price"], filters=filters, prefs=prefs, patient=False, info=rank_info)
         found.update(results=results, statuses=statuses)
         return results
@@ -786,10 +787,12 @@ def update_profile(body: ProfilePatch, user: User = Depends(require_user)):
 # ── Dev only: traces (A2) ────────────────────────────────────────────────────
 
 @app.get("/dev/traces")
-def dev_traces(limit: int = 50, user: User = Depends(require_user)):
+def dev_traces(limit: int = 50, user: User | None = Depends(optional_user)):
     """The latest agent runs, for /dev/traces. Not served in production."""
     if config.APP_ENV == "production":
         raise HTTPException(404, "Not found.")
+    if user is None:
+        raise HTTPException(401, "Please log in to do that.")
     rows = supa.service().select("traces", {"select": "*", "order": "created_at.desc",
                                             "limit": str(max(1, min(limit, 200)))})
     return {"traces": rows}

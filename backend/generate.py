@@ -96,6 +96,26 @@ def clear_cache() -> int:
     return len(files)
 
 
+# ─── Reading JSON answers ─────────────────────────────────────────────────────
+
+
+def loads_json(raw: str):
+    """
+    Parse a JSON answer. Tolerates a ```json fence and trailing junk after the
+    first complete object (models sometimes add a stray "}"). Raises
+    ValueError (json.JSONDecodeError) when there is no JSON at all.
+    """
+    cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        starts = [i for i in (cleaned.find("{"), cleaned.find("[")) if i >= 0]
+        if not starts:
+            raise
+        obj, _ = json.JSONDecoder().raw_decode(cleaned[min(starts):])
+        return obj
+
+
 # ─── Pacing and guards ───────────────────────────────────────────────────────
 
 

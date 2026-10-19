@@ -32,7 +32,7 @@ function Onboarding() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-[640px] flex-col md:py-10">
+    <div className="mx-auto flex min-h-dvh max-w-[1040px] flex-col md:py-10">
       <header className="flex items-center justify-between pb-1 pl-5 pr-3 pt-3.5">
         <div className="text-[13px] font-medium text-muted">Step 2 of 2 · all optional</div>
         <button

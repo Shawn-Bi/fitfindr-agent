@@ -4,53 +4,43 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { BuyerVerdict } from "@/components/BuyerVerdict";
+import { FilterBar } from "@/components/FilterBar";
 import { useAuth } from "@/components/AuthProvider";
 import { BackIcon, ExternalIcon } from "@/components/Icons";
 import { ListingCard, ListingImage, SaveButton } from "@/components/ListingCard";
+import { OutfitCollage, type CollageTile } from "@/components/OutfitCollage";
 import { SearchBox } from "@/components/SearchBox";
 import { ErrorBox, Spinner } from "@/components/States";
 import { StorePanel } from "@/components/StoreBar";
 import { api, ApiError } from "@/lib/api";
+import { filtersFromParams, filtersToBody, filtersToParams } from "@/lib/filters";
 import { cleanTitle, money, STORE_LABELS, timeAgo } from "@/lib/format";
-import type { Chip, Listing, SearchResponse } from "@/lib/types";
+import type { Chip, Listing, SearchFilters, SearchResponse } from "@/lib/types";
 
-function useSearchState() {
+interface SearchState {
+  q: string;
+  no_size: boolean;
+  no_price: boolean;
+  filters: SearchFilters;
+}
+
+function useSearchState(): SearchState {
   const params = useSearchParams();
   return {
     q: params.get("q") || "",
     no_size: params.get("no_size") === "1",
     no_price: params.get("no_price") === "1",
-    max_price: params.get("max") ? Number(params.get("max")) : null,
+    filters: filtersFromParams(params),
   };
 }
 
-function buildUrl(s: { q: string; no_size?: boolean; no_price?: boolean; max_price?: number | null }) {
+function buildUrl(s: SearchState) {
   const p = new URLSearchParams({ q: s.q });
   if (s.no_size) p.set("no_size", "1");
   if (s.no_price) p.set("no_price", "1");
-  if (s.max_price != null) p.set("max", String(s.max_price));
+  filtersToParams(s.filters, p);
   return `/search?${p.toString()}`;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        } catch {
-          setCopied(false);
-        }
-      }}
-      className="h-11 shrink-0 rounded-[10px] border-[1.5px] border-ink bg-surface px-3 text-[13px] font-bold hover:bg-tint"
-    >
-      <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
-    </button>
-  );
 }
 
 function Chips({ chips, onRemove }: { chips: Chip[]; onRemove: (c: Chip) => void }) {
@@ -84,6 +74,12 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
   const meta = [size, item.condition, store, updated && `updated ${updated}`].filter(Boolean).join(" · ");
   const styling = data.styling;
   const title = cleanTitle(item.title);
+  const tiles: CollageTile[] = [
+    { src: item.image_url, alt: title, badge: store, kind: "find" },
+    ...(styling?.items || []).slice(0, 3).map(
+      (c): CollageTile => ({ src: c.photo || c.thumb, alt: `Your ${c.name}`, badge: "Yours", kind: "closet" }),
+    ),
+  ];
   return (
     <article className="flex flex-col overflow-hidden rounded-[18px] bg-surface md:flex-row" aria-labelledby="best-title">
       <div className="relative md:w-[44%] md:shrink-0">
@@ -98,7 +94,7 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
           <SaveButton listing={item} saved={item.saved} />
         </div>
       </div>
-      <div className="flex flex-1 flex-col gap-3 px-4 pb-4 pt-3.5 md:gap-3.5 md:px-[22px] md:py-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 pb-4 pt-3.5 md:gap-3.5 md:px-[22px] md:py-5">
         <div className="flex justify-between gap-2.5">
           <div className="min-w-0">
             <h2 id="best-title" className="m-0 text-[17px] font-bold leading-tight md:text-[22px]">
@@ -113,21 +109,18 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
           <h3 className="m-0 text-[13px] font-bold md:text-sm">
             {data.personalized ? "How to wear it with your closet" : "How to wear it"}
           </h3>
+          {tiles.length > 1 && (
+            <OutfitCollage tiles={tiles} label={`Outfit: ${title} with your closet pieces`} className="max-w-[420px]" />
+          )}
           {styling?.items && styling.items.length > 0 && (
             <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
               {styling.items.map((c) => (
                 <li key={c.id}>
                   <Link
                     href={`/closet/${c.id}`}
-                    className="flex w-[72px] flex-col gap-1 text-[11px] leading-tight text-ink no-underline hover:text-primary md:w-[78px] md:text-xs"
+                    className="flex min-h-11 items-center rounded-full bg-surface px-3 text-xs font-bold text-ink no-underline hover:text-primary"
                   >
-                    {c.thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- signed Supabase URL
-                      <img src={c.thumb} alt={`Your ${c.name}`} className="h-[72px] w-[72px] rounded-[10px] object-cover md:h-[78px] md:w-[78px]" />
-                    ) : (
-                      <span className="h-[72px] w-[72px] rounded-[10px] bg-line-soft" />
-                    )}
-                    <span className="line-clamp-2">{c.name}</span>
+                    Your {c.name}
                   </Link>
                 </li>
               ))}
@@ -156,21 +149,7 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
           )}
         </div>
 
-        {data.fit_card && (
-          <div className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-dashed border-line-dash p-3 md:flex-row md:items-start md:gap-3 md:px-3.5">
-            <div className="flex items-center justify-between md:hidden">
-              <span className="text-[13px] font-bold">Fit card</span>
-              <CopyButton text={data.fit_card} />
-            </div>
-            <p className="m-0 flex-1 text-[13px] leading-[1.45] text-ink-soft md:text-sm md:leading-normal">
-              <strong className="hidden md:inline">Fit card: </strong>
-              {data.fit_card}
-            </p>
-            <div className="hidden md:block">
-              <CopyButton text={data.fit_card} />
-            </div>
-          </div>
-        )}
+        {data.fit_card && <BuyerVerdict verdict={data.fit_verdict || null} caption={data.fit_card} price={item.price} />}
 
         <div className="flex gap-2.5">
           <a
@@ -194,6 +173,53 @@ function BestMatch({ item, data }: { item: Listing; data: SearchResponse }) {
   );
 }
 
+/** The agent's one clarifying question (A1), with tap-to-answer suggestions. */
+function Clarify({ question, suggestions, onAnswer }: { question: string; suggestions: string[]; onAnswer: (q: string) => void }) {
+  const [answer, setAnswer] = useState("");
+  return (
+    <section className="flex flex-col gap-3 rounded-[18px] bg-surface p-5" aria-live="polite" aria-labelledby="clarify-title">
+      <div className="text-xs font-bold uppercase tracking-wide text-primary">One quick question</div>
+      <h1 id="clarify-title" className="m-0 font-heading text-xl font-bold">
+        {question}
+      </h1>
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onAnswer(s)}
+            className="h-11 rounded-full border-[1.5px] border-ink bg-surface px-4 text-sm font-bold hover:bg-tint"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (answer.trim()) onAnswer(answer.trim());
+        }}
+        className="flex gap-2"
+      >
+        <label htmlFor="clarify-answer" className="sr-only">
+          Your answer
+        </label>
+        <input
+          id="clarify-answer"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder="Or type it, e.g. a camel wool coat"
+          maxLength={200}
+          className="h-12 min-w-0 flex-1 rounded-xl border-[1.5px] border-line bg-surface px-3.5 text-base outline-none focus:border-primary"
+        />
+        <button type="submit" className="h-12 rounded-xl bg-primary px-4 font-bold text-white hover:bg-primary-hover">
+          Search
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function Results() {
   const router = useRouter();
   const state = useSearchState();
@@ -202,7 +228,7 @@ function Results() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const key = `${state.q}|${state.no_size}|${state.no_price}|${state.max_price}|${session?.user.id || ""}`;
+  const key = `${buildUrl(state)}|${session?.user.id || ""}`;
 
   const run = useCallback(
     (signal?: AbortSignal) => {
@@ -211,7 +237,12 @@ function Results() {
       setError(null);
       setHidden(new Set());
       api<SearchResponse>("/search", {
-        json: { q: state.q, no_size: state.no_size, no_price: state.no_price, max_price: state.max_price },
+        json: {
+          q: state.q,
+          no_size: state.no_size,
+          no_price: state.no_price,
+          ...filtersToBody(state.filters),
+        },
         signal,
       })
         .then((d) => {
@@ -237,8 +268,11 @@ function Results() {
 
   function removeChip(c: Chip) {
     if (c.key === "q") return router.push(session ? "/home" : "/");
-    if (c.key === "size") return router.push(buildUrl({ ...state, no_size: true }));
-    if (c.key === "price") return router.push(buildUrl({ ...state, no_price: true, max_price: null }));
+    if (c.key === "size") return router.push(buildUrl({ ...state, no_size: true, filters: { ...state.filters, sizes: null } }));
+    if (c.key === "price")
+      return router.push(
+        buildUrl({ ...state, no_price: true, filters: { ...state.filters, min_price: null, max_price: null } }),
+      );
   }
 
   function relax(params: Record<string, unknown>) {
@@ -246,11 +280,42 @@ function Results() {
       buildUrl({
         ...state,
         no_size: params.no_size ? true : state.no_size,
-        max_price: typeof params.max_price === "number" ? params.max_price : state.max_price,
         no_price: typeof params.max_price === "number" ? false : state.no_price,
+        filters: {
+          ...state.filters,
+          sizes: params.no_size ? null : state.filters.sizes,
+          max_price: typeof params.max_price === "number" ? params.max_price : state.filters.max_price,
+        },
       }),
     );
   }
+
+  function applyFilters(next: SearchFilters) {
+    // Explicit filters replace the profile's; clearing a price or size means "none".
+    router.push(
+      buildUrl({
+        ...state,
+        no_size: next.sizes != null && next.sizes.length === 0,
+        no_price: next.min_price == null && next.max_price == null,
+        filters: next,
+      }),
+    );
+  }
+
+  const shownFilters: SearchFilters = useMemo(() => {
+    const f = data?.filters;
+    if (!f) return state.filters;
+    return {
+      min_price: f.min_price,
+      max_price: f.max_price,
+      sizes: f.sizes,
+      conditions: f.conditions,
+      colors: f.colors,
+      gender: f.gender,
+      within_days: f.within_days,
+      stores: f.stores,
+    };
+  }, [data, state.filters]);
 
   const best = data?.results[0];
   const more = useMemo(
@@ -289,9 +354,19 @@ function Results() {
           <>
             <div className="flex flex-col gap-2 px-4 pt-1 md:flex-row md:flex-wrap md:items-center md:px-0 md:pt-5">
               <div className="text-xs text-muted md:mr-1 md:text-[13px]">
-                {data ? `FitFindr searched ${data.stores.filter((s) => s.status === "live").length} stores for` : "Searching for"}
+                {data && !data.clarify
+                  ? `FitFindr searched ${data.stores.filter((s) => s.status === "live").length} stores for`
+                  : "Searching for"}
               </div>
-              {data && <Chips chips={data.chips} onRemove={removeChip} />}
+              {data && !data.clarify && <Chips chips={data.chips} onRemove={removeChip} />}
+            </div>
+            <div className="px-4 pt-2 md:px-0 md:pt-3">
+              <FilterBar
+                value={shownFilters}
+                support={data?.filter_support}
+                onApply={applyFilters}
+                fromProfile={!!data?.chips.some((c) => c.from_profile)}
+              />
             </div>
 
             {busy && (
@@ -309,7 +384,24 @@ function Results() {
             {data && !busy && !error && (
               <div className="mt-3.5 flex flex-col gap-5 md:mt-5 md:flex-row md:items-start">
                 <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-4 md:px-0">
-                  {data.empty ? (
+                  {data.relaxed && (
+                    <div role="status" className="flex items-start gap-2 rounded-xl bg-tint p-3 text-sm">
+                      <span aria-hidden="true" className="font-bold text-primary-hover">
+                        ↻
+                      </span>
+                      <span>
+                        {data.relaxed.message}{" "}
+                        <span className="text-muted">FitFindr changed only this one filter.</span>
+                      </span>
+                    </div>
+                  )}
+                  {data.clarify ? (
+                    <Clarify
+                      question={data.clarify.question}
+                      suggestions={data.clarify.suggestions}
+                      onAnswer={(q) => router.push(buildUrl({ ...state, q }))}
+                    />
+                  ) : data.empty ? (
                     <section className="flex flex-col gap-3 rounded-[18px] bg-surface p-5" aria-live="polite">
                       <h1 className="m-0 font-heading text-xl font-bold">No matches yet</h1>
                       <p className="m-0 text-[15px]">{data.empty.message}</p>
@@ -352,57 +444,61 @@ function Results() {
                     </section>
                   )}
 
-                  <div className="md:hidden">
-                    <StorePanel stores={data.stores} />
-                    {data.stores.some((s) => s.status === "live" && s.count > 0) && more.length + hidden.size > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show stores">
-                        {data.stores
-                          .filter((s) => s.status === "live" && s.count > 0)
-                          .map((s) => (
-                            <button
-                              key={s.platform}
-                              type="button"
-                              aria-pressed={!hidden.has(s.platform)}
-                              onClick={() => toggleStore(s.platform)}
-                              className={`h-11 rounded-full border-[1.5px] px-3 text-[13px] ${
-                                hidden.has(s.platform) ? "border-line bg-surface text-muted line-through" : "border-ink bg-surface"
-                              }`}
-                            >
-                              {s.label}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </div>
+                  {!data.clarify && (
+                    <div className="md:hidden">
+                      <StorePanel stores={data.stores} />
+                      {data.stores.some((s) => s.status === "live" && s.count > 0) && more.length + hidden.size > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Show stores">
+                          {data.stores
+                            .filter((s) => s.status === "live" && s.count > 0)
+                            .map((s) => (
+                              <button
+                                key={s.platform}
+                                type="button"
+                                aria-pressed={!hidden.has(s.platform)}
+                                onClick={() => toggleStore(s.platform)}
+                                className={`h-11 rounded-full border-[1.5px] px-3 text-[13px] ${
+                                  hidden.has(s.platform) ? "border-line bg-surface text-muted line-through" : "border-ink bg-surface"
+                                }`}
+                              >
+                                {s.label}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <aside className="hidden w-[300px] shrink-0 flex-col gap-3.5 md:flex">
-                  <StorePanel stores={data.stores} variant="filters" hidden={hidden} onToggle={toggleStore} />
-                  <section className="flex flex-col gap-2 rounded-2xl bg-surface p-4">
-                    <h2 className="m-0 text-[15px] font-bold">
-                      {data.personalized ? "Matched to your closet" : "Style it with your closet"}
-                    </h2>
-                    <p className="m-0 text-[13px] leading-normal text-muted">
-                      {data.personalized ? (
-                        <>
-                          Ranked using your {data.closet_count} closet items
-                          {data.parsed.size ? `, size ${data.parsed.size}` : ""}
-                          {data.parsed.max_price != null ? ` and a ${money(data.parsed.max_price)} budget` : ""}.{" "}
-                          <Link href="/profile">Edit preferences</Link>
-                        </>
-                      ) : data.signed_in ? (
-                        <>
-                          <Link href="/closet/new">Add closet items</Link> and FitFindr will suggest outfits with your own
-                          clothes.
-                        </>
-                      ) : (
-                        <>
-                          <Link href="/signup">Sign up</Link> to get outfit ideas using the clothes you already own.
-                        </>
-                      )}
-                    </p>
-                  </section>
-                </aside>
+                {!data.clarify && (
+                  <aside className="hidden w-[300px] shrink-0 flex-col gap-3.5 md:flex">
+                    <StorePanel stores={data.stores} variant="filters" hidden={hidden} onToggle={toggleStore} />
+                    <section className="flex flex-col gap-2 rounded-2xl bg-surface p-4">
+                      <h2 className="m-0 text-[15px] font-bold">
+                        {data.personalized ? "Matched to your closet" : "Style it with your closet"}
+                      </h2>
+                      <p className="m-0 text-[13px] leading-normal text-muted">
+                        {data.personalized ? (
+                          <>
+                            Ranked by meaning, not just keywords, using your {data.closet_count} closet items
+                            {data.parsed.size ? `, size ${data.parsed.size}` : ""}
+                            {data.parsed.max_price != null ? ` and a ${money(data.parsed.max_price)} budget` : ""}.{" "}
+                            <Link href="/profile">Edit preferences</Link>
+                          </>
+                        ) : data.signed_in ? (
+                          <>
+                            <Link href="/closet/new">Add closet items</Link> and FitFindr will suggest outfits with your own
+                            clothes.
+                          </>
+                        ) : (
+                          <>
+                            <Link href="/signup">Sign up</Link> to get outfit ideas using the clothes you already own.
+                          </>
+                        )}
+                      </p>
+                    </section>
+                  </aside>
+                )}
               </div>
             )}
             {data?.data_mode === "fixtures" && !busy && (

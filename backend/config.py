@@ -187,3 +187,8 @@ THUMB_MAX_PX = 400
 # server by default; set FRONTEND_ORIGINS to the Vercel URL in production.
 FRONTEND_ORIGINS = [o.strip() for o in os.getenv(
     "FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+# Optional: also allow origins matching this regex, e.g. the Vercel preview
+# URLs of this project: ^https://fitfindr(-[a-z0-9-]+)?\.vercel\.app$
+FRONTEND_ORIGIN_REGEX = os.getenv("FRONTEND_ORIGIN_REGEX", "").strip() or None
+if APP_ENV == "production" and not os.getenv("FRONTEND_ORIGINS", "").strip():
+    raise SystemExit("Refusing to start: production needs FRONTEND_ORIGINS (the Vercel URL) for CORS.")

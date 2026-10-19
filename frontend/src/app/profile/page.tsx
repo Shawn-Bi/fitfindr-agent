@@ -49,7 +49,7 @@ function ProfilePage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[640px] px-4 md:px-6 md:pt-6">
+      <div className="mx-auto max-w-[1040px] px-4 md:px-6 md:pt-6">
         <header className="pb-3 pt-5 md:pt-0">
           <h1 className="m-0 font-heading text-[28px] font-bold tracking-[-0.5px]">Profile</h1>
           {profile?.email && <div className="text-[13px] text-muted">Signed in as {profile.email}</div>}
@@ -58,11 +58,13 @@ function ProfilePage() {
         {!profile && !error && <Spinner />}
         {profile && (
           <div className="flex flex-col gap-8 pb-6">
-            <section className="rounded-[18px] bg-surface p-4 md:p-6" aria-labelledby="prefs-title">
-              <h2 id="prefs-title" className="mb-1 mt-0 font-heading text-lg font-bold">
+            <section aria-labelledby="prefs-title">
+              <h2 id="prefs-title" className="mb-1 mt-0 font-heading text-xl font-bold">
                 Your sizes and style
               </h2>
-              <p className="mb-4 mt-0 text-sm text-muted">Used only to filter and rank finds for you. All optional.</p>
+              <p className="mb-4 mt-0 text-sm text-muted">
+                Used only to filter, rank and style finds for you. All optional, and only you can see them.
+              </p>
               {saved && (
                 <div className="mb-4">
                   <FormMessage kind="info">Saved. New searches use these preferences.</FormMessage>
@@ -78,7 +80,7 @@ function ProfilePage() {
               />
             </section>
 
-            <section className="flex flex-col gap-3 rounded-[18px] bg-surface p-4 md:p-6" aria-labelledby="account-title">
+            <section className="flex flex-col gap-3 rounded-[18px] border border-line-blue bg-surface p-4 md:max-w-[520px] md:p-6" aria-labelledby="account-title">
               <h2 id="account-title" className="m-0 font-heading text-lg font-bold">
                 Account
               </h2>

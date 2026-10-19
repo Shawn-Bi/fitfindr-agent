@@ -24,7 +24,7 @@ import json
 import re
 
 import config
-from generate import generate
+from generate import generate, loads_json
 from sources import fetch_candidates
 
 
@@ -302,7 +302,7 @@ def _parse_outfit(raw: str, items: list[dict]) -> dict:
     text, ids = raw.strip(), []
     cleaned = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
     try:
-        data = json.loads(cleaned)
+        data = loads_json(cleaned)
         if isinstance(data, dict) and str(data.get("text") or "").strip():
             text = str(data["text"]).strip()
             ids = [str(i) for i in data.get("item_ids") or []]
@@ -457,7 +457,7 @@ def parse_fit_card(raw: str, item: dict, condition_grade: str | None) -> dict:
     """Model JSON → {"caption", "verdict"}; estimates below medium confidence become unknown."""
     cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
     try:
-        data = json.loads(cleaned)
+        data = loads_json(cleaned)
     except (json.JSONDecodeError, TypeError):
         data = None
     if not isinstance(data, dict):

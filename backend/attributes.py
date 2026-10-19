@@ -23,7 +23,7 @@ _CATEGORY_WORDS = (
                   r"overshirt|shacket|trench|peacoat|bomber"),
     ("shoes", r"shoes?|sneakers?|boots?|booties|heels|pumps|loafers?|sandals?|trainers?|clogs?|mules?|"
               r"flats|oxfords?|slingbacks?"),
-    ("bottoms", r"pants|jeans|trousers|shorts|skirts?|slacks|joggers|chinos|leggings|cargos?|corduroys?|"
+    ("bottoms", r"pants|jeans|trousers|shorts|skirts?|slacks|joggers|sweatpants|chinos|leggings|cargos?|corduroys?|"
                 r"culottes"),
     ("accessories", r"bags?|handbags?|purses?|clutch|totes?|crossbody|belts?|hats?|caps?|scarf|scarves|"
                     r"beanie|necklace|earrings|sunglasses|wallet"),

@@ -9,7 +9,15 @@ export const STORE_LABELS: Record<Platform, string> = {
   fb_marketplace: "FB Marketplace",
 };
 
+/** The six style cards on Home. */
 export const STYLES = ["Vintage", "Y2K", "Streetwear", "Minimalist", "Grunge", "Cottagecore"] as const;
+
+/** Every style a profile can pick (B3); the backend uses the same names. */
+export const PROFILE_STYLES = [
+  "Vintage", "Y2K", "Streetwear", "Minimalist", "Grunge", "Cottagecore",
+  "Business casual / workwear", "Classic / preppy", "Dark / goth", "Boho", "Athleisure",
+  "Quiet luxury / old money", "Romantic / feminine", "Western", "Coastal", "Avant-garde",
+] as const;
 
 // Style card colors from the Home prototype (white text passes 4.5:1 on each).
 export const STYLE_COLORS: Record<string, string> = {
@@ -40,6 +48,8 @@ export const COLOR_SWATCHES: { name: string; hex: string }[] = [
   { name: "light blue", hex: "#A9C8E8" },
   { name: "brown", hex: "#6B4A2F" },
   { name: "camel", hex: "#C19A6B" },
+  { name: "beige", hex: "#D9C7A7" },
+  { name: "burgundy", hex: "#6E1F33" },
   { name: "rust", hex: "#A9502A" },
   { name: "red", hex: "#B3261E" },
   { name: "pink", hex: "#E4A3B4" },
@@ -84,3 +94,32 @@ export function listingMeta(
   const size = l.size ?? (noteMissingSize ? "size not listed" : null);
   return [size, l.condition, STORE_LABELS[l.platform]].filter(Boolean).join(" · ");
 }
+
+export const CONDITIONS = [
+  { key: "new_with_tags", label: "New with tags" },
+  { key: "new", label: "New" },
+  { key: "like_new", label: "Like new" },
+  { key: "good", label: "Good" },
+  { key: "fair", label: "Fair" },
+] as const;
+
+const range = (from: number, to: number, step = 1) =>
+  Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => String(from + i * step));
+
+/** US size options per profile category (B3). */
+export const SIZE_OPTIONS = {
+  letter: ["XXS", "XS", "S", "M", "L", "XL", "XXL"],
+  numeric: range(0, 20, 2),
+  waist: range(24, 40),
+  inseam: range(28, 34),
+  bottomsLetter: ["XS", "S", "M", "L", "XL"],
+  dresses: [...range(0, 20, 2), "XS", "S", "M", "L", "XL"],
+  shoes: range(5, 13, 0.5),
+};
+
+export const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
+  "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
+  "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+  "WI", "WY",
+];

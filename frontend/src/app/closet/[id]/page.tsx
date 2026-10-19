@@ -6,12 +6,12 @@ import { Suspense, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BackIcon, TrashIcon } from "@/components/Icons";
-import { ListingCard } from "@/components/ListingCard";
 import { RequireAuth } from "@/components/RequireAuth";
-import { ErrorBox, SkeletonGrid, Spinner } from "@/components/States";
+import { ErrorBox, Spinner } from "@/components/States";
+import { StylistOutfit } from "@/components/StylistOutfit";
 import { api, ApiError } from "@/lib/api";
 import { CATEGORIES } from "@/lib/format";
-import type { ClosetItem, Pick } from "@/lib/types";
+import type { ClosetItem } from "@/lib/types";
 
 function Detail({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
@@ -23,13 +23,12 @@ function Detail({ label, value }: { label: string; value: string | null | undefi
   );
 }
 
-/** P8 Closet item detail: photo, details, Edit/Delete, "Finds that go with this". */
+/** P8 Closet item detail: photo, details, Edit/Delete, and the AI stylist's outfit (B2). */
 function ItemDetail() {
   const { id } = useParams<{ id: string }>();
   const added = useSearchParams().get("added") === "1";
   const router = useRouter();
   const [item, setItem] = useState<ClosetItem | null>(null);
-  const [matches, setMatches] = useState<Pick[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -38,9 +37,6 @@ function ItemDetail() {
     api<ClosetItem>(`/closet/items/${id}`)
       .then(setItem)
       .catch((e) => setError(e instanceof ApiError ? e.message : "Couldn't load this item."));
-    api<{ matches: Pick[] }>(`/closet/items/${id}/matches`)
-      .then((d) => setMatches(d.matches))
-      .catch(() => setMatches([]));
   }, [id]);
 
   async function remove() {
@@ -114,7 +110,8 @@ function ItemDetail() {
             <div className="flex flex-col gap-4 px-4 pt-4 md:px-0 md:pt-0">
               {added && (
                 <div role="status" className="rounded-xl bg-tint p-3 text-sm">
-                  Saved to your closet. <Link href="/closet/new">Add another item</Link>
+                  Saved to your closet. The stylist is building an outfit for it below.{" "}
+                  <Link href="/closet/new">Add another item</Link>
                 </div>
               )}
               <div>
@@ -127,33 +124,11 @@ function ItemDetail() {
                 <Detail label="Colors" value={item.colors.join(", ")} />
                 <Detail label="Style" value={item.style_tags.join(", ")} />
                 <Detail label="Season" value={item.season.join(", ")} />
+                <Detail label="Cut for" value={item.gender ? item.gender[0].toUpperCase() + item.gender.slice(1) : null} />
                 <Detail label="Notes" value={item.notes} />
               </dl>
 
-              <section aria-labelledby="finds-title" className="pb-4">
-                <h2 id="finds-title" className="mb-2.5 mt-2 font-heading text-lg font-bold">
-                  Finds that go with this
-                </h2>
-                {!matches && <SkeletonGrid count={2} />}
-                {matches && matches.length === 0 && (
-                  <p className="m-0 rounded-2xl bg-surface p-4 text-sm text-muted">
-                    No finds yet. Matches come from recent searches —{" "}
-                    <Link href="/home">try a search</Link> and check back.
-                  </p>
-                )}
-                {matches && matches.length > 0 && (
-                  <>
-                    <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0">
-                      {matches.map((m) => (
-                        <div key={`${m.listing.platform}-${m.listing.id}`} className="w-[170px] shrink-0 md:w-auto">
-                          <ListingCard listing={m.listing} reason={m.reason} />
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mb-0 mt-2 text-xs text-muted">Price and stock may change on the original site.</p>
-                  </>
-                )}
-              </section>
+              <StylistOutfit key={item.updated_at} item={item} />
             </div>
           </div>
         )}

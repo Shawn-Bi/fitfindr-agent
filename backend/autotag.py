@@ -18,6 +18,7 @@ import re
 from PIL import Image
 
 import generate
+from generate import loads_json
 
 CATEGORIES = ("tops", "bottoms", "outerwear", "dresses", "shoes", "accessories")
 COLORS = ("black", "white", "cream", "beige", "grey", "navy", "denim blue", "light blue", "brown",
@@ -64,7 +65,7 @@ def _pick(values, allowed, limit):
 def parse_tags(raw: str, default_gender: str | None = None) -> dict:
     cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
     try:
-        data = json.loads(cleaned)
+        data = loads_json(cleaned)
     except (json.JSONDecodeError, TypeError):
         data = {}
     if not isinstance(data, dict):

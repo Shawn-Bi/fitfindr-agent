@@ -17,6 +17,7 @@ import re
 
 import config
 import generate
+from generate import loads_json
 
 OUTFIT_DIMS = ("style_match", "gender_match", "colour_harmony", "proportion", "completeness")
 CARD_DIMS = ("facts_correct", "buyer_voice", "verdict_present")
@@ -38,7 +39,7 @@ def _ask(prompt: str) -> dict:
     raw = generate.generate(prompt, json_mode=True, temperature=0.0, model=config.JUDGE_MODEL, cache=False)
     cleaned = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
     try:
-        data = json.loads(cleaned)
+        data = loads_json(cleaned)
         return data if isinstance(data, dict) else {}
     except json.JSONDecodeError:
         return {}
