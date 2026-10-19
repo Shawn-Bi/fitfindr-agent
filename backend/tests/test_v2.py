@@ -309,6 +309,11 @@ class StylistTest(unittest.TestCase):
         self.assertIsNone(jacket["listing"])           # not chosen → described, with "Search this"
         self.assertTrue(jacket["search"])
         self.assertEqual(out["live_calls"], 0)
+        # the model sometimes drops the {"choices": ...} wrapper; the picks must survive that
+        bare = json.dumps([{"piece": 0, "index": 0, "reason": "Right tee"}, {"piece": 1, "index": None}])
+        with mock.patch("generate.generate", return_value=bare):
+            out = stylist.build_outfit(self.skirt, {"gender": "women"}, (None, 60), plan=plan, pool=recent_pool())
+        self.assertIsNotNone(out["pieces"][0]["listing"])
 
     def test_stale_listings_are_hidden_in_live_mode(self):
         outfit = {"pieces": [{"name": "x", "listing": {"id": "1"}, "found_at": "2020-01-01T00:00:00+00:00"}]}
@@ -367,6 +372,19 @@ class SmallPartsTest(unittest.TestCase):
         self.assertEqual(r["model_calls"], 3)
         self.assertLessEqual(len(r["steps"][0]["result"]["top"]), 6)
         self.assertLess(len(r["steps"][0]["result"]["note"]), 200)
+
+    @mock.patch("generate._get_client")
+    @mock.patch("generate._wait_for_slot")
+    @mock.patch("generate._check_budget")
+    @mock.patch("time.sleep")
+    def test_per_day_quota_is_not_retried(self, sleep, _budget, _slot, _client):
+        import generate
+        err = RuntimeError("429 RESOURCE_EXHAUSTED quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel")
+        do_call = mock.Mock(side_effect=err)
+        with self.assertRaises(ModelUnavailable):
+            generate._request("m", do_call)
+        self.assertEqual(do_call.call_count, 1)
+        sleep.assert_not_called()
 
 
 class ApiV2Test(unittest.TestCase):

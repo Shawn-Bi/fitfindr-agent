@@ -374,6 +374,11 @@ def _request(model: str, do_call, retries: int | None = None):
             )
             if not rate_limited:
                 raise ModelUnavailable(_explain(exc)) from exc
+            # A per-day quota won't clear in a minute: retrying only wastes the run's time.
+            if "perday" in message:
+                raise ModelUnavailable(
+                    "Daily free-tier quota used up for this model; it resets at midnight Pacific time."
+                ) from exc
             if attempt + 1 >= attempts:
                 break
             backoff = _retry_delay(exc, attempt)

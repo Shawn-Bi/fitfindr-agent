@@ -285,7 +285,9 @@ def pick_listings(item: dict, plan: dict, options: list[list[dict]], gender: str
         raw = generate.generate(pick_prompt(item, plan, options, gender), json_mode=True,
                                 temperature=0.0, cache=cache_ok)
         data = loads_json(raw)
-        choices = {int(c.get("piece")): c for c in data.get("choices") or [] if isinstance(c, dict)}
+        # The model sometimes answers with the bare list instead of {"choices": [...]}.
+        rows = data if isinstance(data, list) else data.get("choices") or []
+        choices = {int(c.get("piece")): c for c in rows if isinstance(c, dict)}
     except Exception:  # noqa: BLE001
         return [(None, None)] * len(options)
     out = []

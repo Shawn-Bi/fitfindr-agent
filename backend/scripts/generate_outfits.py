@@ -129,8 +129,15 @@ def main() -> None:
              f"- Planner model {config.MODEL} · judge {config.JUDGE_MODEL} (temperature 0)",
              f"- Profile: shopping for {prefs.get('gender')}, styles {prefs.get('styles') or 'none'}, "
              f"budget ${budget[0]:.0f}–${budget[1]:.0f}" if budget[0] and budget[1] else "", ""]
+    judge_error = None
     for item, item_prefs, outfit in report:
-        result = None if args.no_judge else judge.judge_stylist(outfit, item, item_prefs)
+        result = None
+        if not args.no_judge and not judge_error:
+            try:
+                result = judge.judge_stylist(outfit, item, item_prefs)
+            except Exception as exc:  # noqa: BLE001 — the outfits are saved; only the scores are missing
+                judge_error = config.redact(exc)[:160]
+                print(f"judge failed, writing the report without scores: {judge_error}")
         if result and result["avg"]:
             scores.append(result)
         lines += [f"## {item['name']} → {outfit['title']}", "",
@@ -159,6 +166,8 @@ def main() -> None:
         table += [f"| **Overall** | **{avg}** |", ""]
         lines[6:6] = table
         print(f"judge average {avg} over {len(scores)} outfits")
+    if judge_error:
+        lines[6:6] = [f"> **Judge unavailable** after {len(scores)} outfit(s): {judge_error}", ""]
 
     spent = {m: generate.ledger().get(m, 0) - ledger_before.get(m, 0) for m in generate.ledger()}
     shown = sum(1 for _, _, o in report for p in o["pieces"] if p["listing"])
