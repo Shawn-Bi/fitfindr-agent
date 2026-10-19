@@ -18,8 +18,8 @@ Every adapter in this package returns a list of these:
 Rule: a value the API didn't give us is None. Never invent one.
 A raw item with no title, price or url is not a usable listing and is dropped.
 
-TODO (step 8): add `from_resale(raw_item)` once real Fashion Resale API
-responses are recorded and we can see the actual field names.
+Per-API mappers live here too (from_resale, ...) so every field decision is in
+one file.
 """
 
 import re
@@ -71,3 +71,47 @@ def make_listing(*, id, title, price, platform, url,
         return None
     listing["platform"] = listing["platform"].lower()
     return listing
+
+
+# ─── Fashion Resale API (Depop, Poshmark, Mercari) ───────────────────────────
+# Raw listing fields seen in recorded responses (tests/fixtures/resale_*.json):
+#   id, platform, title, price (number), currency, size, brand, images (list),
+#   url, seller {id}, category, created_at, condition (sometimes)
+# Response-level: search_metadata.scraped_at = when the API fetched the data.
+
+RESALE_PLATFORMS = ("depop", "poshmark", "mercari")
+
+
+def from_resale(item: dict, fetched_at: str | None = None) -> dict | None:
+    """
+    One Fashion Resale API listing → standard listing dict, or None if unusable.
+
+    - Non-USD listings are dropped (FitFindr is US-only).
+    - image_url is the first photo.
+    - updated_at is the listing's own updated_at if the API sends one, else the
+      time the API fetched it (search_metadata.scraped_at). created_at is the
+      listing date, not an update time, so it isn't used.
+    """
+    if not isinstance(item, dict):
+        return None
+    currency = clean_str(item.get("currency"))
+    if currency and currency.upper() != "USD":
+        return None
+    platform = (clean_str(item.get("platform")) or "").lower()
+    if platform not in RESALE_PLATFORMS:
+        return None
+    images = item.get("images") or []
+    image = images[0] if isinstance(images, list) and images else None
+    if isinstance(image, dict):
+        image = image.get("url")
+    return make_listing(
+        id=item.get("id"),
+        title=item.get("title"),
+        price=item.get("price"),
+        platform=platform,
+        url=item.get("url"),
+        size=item.get("size"),
+        image_url=image,
+        condition=item.get("condition"),
+        updated_at=item.get("updated_at") or fetched_at,
+    )
