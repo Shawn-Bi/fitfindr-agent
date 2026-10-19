@@ -1,0 +1,29 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Model response cache and local quota counter (runtime state, not source)
+backend/.cache/
+backend/.quota.json
+
+# Personal closet photos — local upload tests only
+backend/tests/closet_photos/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
