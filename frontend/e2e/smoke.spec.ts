@@ -76,13 +76,13 @@ test.describe("guest", () => {
     await noHorizontalScroll(page);
   });
 
-  test("empty search offers one-click relax buttons", async ({ page }) => {
+  test("empty search relaxes the size itself, then offers a bigger budget", async ({ page }) => {
     await page.goto(`/search?q=${encodeURIComponent("designer ballgown size XXS under $5")}`);
-    await expect(page.getByText("No matches yet")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Remove size XXS" })).toBeVisible();
+    await expect(page.getByText("No matches yet")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText("Nothing matched in size XXS, so I searched every size.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Raise budget to $10" })).toBeVisible();
-    await page.getByRole("button", { name: "Remove size XXS" }).click();
-    await expect(page).toHaveURL(/no_size=1/);
+    await page.getByRole("button", { name: "Raise budget to $10" }).click();
+    await expect(page).toHaveURL(/max=10/);
     await noHorizontalScroll(page);
   });
 
@@ -152,9 +152,12 @@ test.describe("signed in (test account)", () => {
 
     await page.getByLabel("Choose a photo from your library").setInputFiles(PHOTO);
     await expect(page.getByRole("img", { name: "Your photo of the item" })).toBeVisible();
+    // auto-tagging (A3) runs first; wait for it so it can't overwrite what we type
+    await expect(page.getByText("Reading your photo")).toHaveCount(0, { timeout: 60_000 });
     await page.getByLabel("Name").fill("E2E test jacket");
     await page.getByRole("button", { name: "Outerwear" }).click();
-    await page.getByRole("button", { name: "black", exact: true }).click();
+    const black = page.getByRole("button", { name: "black", exact: true });
+    if ((await black.getAttribute("aria-pressed")) !== "true") await black.click();
     await noHorizontalScroll(page);
     await page.getByRole("button", { name: "Save to closet" }).click();
 

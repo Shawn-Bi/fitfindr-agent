@@ -45,3 +45,6 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Playwright screenshots for hand review (e2e/v2.spec.ts)
+/e2e-shots/
