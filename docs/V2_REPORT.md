@@ -5,35 +5,43 @@ v2 brief. Branch `v2` was created from `mvp`, committed in small steps and
 pushed; `main` and `mvp` were not touched, nothing was force-pushed, nothing was
 deployed, and no accounts or paid services were created.
 
-> **The overnight run did not finish.** Around 06:15, Claude Code stopped three
-> background jobs because the machine ran critically low on memory: the second
-> stylist batch run, and the local frontend and backend servers. I did not
-> restart them. As a result:
-> - **Not run:** the full `run_eval.py` (old + new criteria with judge
->   scores), the full Playwright suite in one pass, and the final click-through
->   of P8 against the improved outfits.
-> - **What the database holds:** the outfits from batch run 1 (6 of 30 pieces
->   with a listing). Run 2's 13 live searches are already in `search_cache`
->   until about 06:10 tomorrow (Oct 20), so finishing run 2 costs no RapidAPI
->   calls if done before then.
+> **Finished the morning after (Oct 19, 09:15–09:55)**, one step at a time.
+> The overnight run had been stopped around 06:15 because the machine ran
+> low on memory. All three steps of "Finish tonight's run" have now run:
+> - **Outfits rebuilt** from the cached searches with no RapidAPI calls:
+>   **21 of 30 pieces now show a real listing** (run 1: 6 of 30), and every
+>   outfit has at least one (`results/stylist_eval_2026-10-19_0929.md`).
+> - **`run_eval.py --label v2`: all 7 criteria MET (5/5 each)**
+>   (`results/run_2026-10-19_0942_v2.md`).
+> - **Playwright: 34/34 pass** at 375 px and 1280 px, including the signed-in
+>   MVP smoke tests and the P8 stylist-outfit test.
 >
-> "Finish tonight's run" below lists the four commands that complete it.
+> **Not finished: judge scores.** The judge model's free tier allows only 20
+> requests a day, and they were used up. The eval has judge scores for 4 of
+> 25 tries, and the new outfits have none. To finish after the quota resets
+> (midnight Pacific time):
+> `$env:FITFINDR_DATA_MODE='live'; python scripts/generate_outfits.py --live-budget 0`
+> (works with no RapidAPI calls only while the cached searches are under
+> 24 h old, until about 06:10 Oct 20). After that the same command without
+> `--live-budget` still re-scores, but on fewer listings.
 
-## Finish tonight's run (about 30 minutes, with the machine otherwise idle)
+### Fixed while finishing
 
-```powershell
-cd backend; .venv\Scripts\Activate.ps1; $env:PYTHONUTF8=1
-# 1. Rebuild the 10 outfits. Uses the cached live searches; --live-budget 0 means no RapidAPI calls.
-$env:FITFINDR_DATA_MODE='live'; python scripts/generate_outfits.py --live-budget 0
-#    worked if it ends "wrote results\stylist_eval_….md" and prints the judge average
-# 2. The eval, old and new criteria, with LLM-judge scores (about 180 Gemini calls)
-$env:FITFINDR_DATA_MODE='fixtures'; python run_eval.py --label v2
-#    worked if it prints "criterion 1..7" lines and writes results\run_…_v2.md
-# 3. Servers, then Playwright at 375 px and 1280 px (two terminals)
-$env:FITFINDR_DATA_MODE='fixtures'; uvicorn api.main:app --port 8000
-cd frontend; npm run build; npm run start
-cd frontend; npx playwright test        # worked if every test shows ✓; screenshots in frontend\e2e-shots\
-```
+1. **The stylist's pick step lost good matches.** The model sometimes answers
+   with a bare list `[{"piece": 0, …}]` instead of `{"choices": […]}`. The code
+   failed on that, caught the error silently and showed "Search this" for
+   every piece of the outfit. That's why the denim-jacket outfit went from
+   3/3 to 0/3 between two identical runs. `stylist.pick_listings` now accepts
+   both shapes (test added). Result: 12/30 → 21/30 pieces with a listing.
+2. **A daily quota was retried as if it were per-minute.** When the free-tier
+   embedding quota (1,000 a day) ran out, every search waited 5 × 65 s
+   before falling back to keyword ranking, which would have taken more than
+   2 hours. `generate._request` now gives up at once on a `PerDay` quota
+   (test added). Search and the stylist fall back to keyword ranking
+   immediately, as they already did for other errors.
+3. **`generate_outfits.py` crashed when the judge was unavailable**, after the
+   outfits had already been saved. It now writes the report without scores
+   and says why, as `run_eval.py` already did.
 
 ## What's done
 
@@ -45,7 +53,7 @@ cd frontend; npx playwright test        # worked if every test shows ✓; screen
 | **A4** Semantic ranking | Done. Gemini embeddings (cached on disk) rerank results after hard drops for category, colour, fabric and gender mismatches. **Bug fixed:** "white denim pants" returned no corduroy or olive items in fixtures or on live data. | `ranking.py`, `attributes.py` |
 | **A5** Outfit collage | Done. Your closet photo(s) plus the listing photo(s) on one white board, on P5 and P8. Planned pieces with no listing show as a colour-swatch "To find" tile. | `OutfitCollage.tsx` |
 | **B1** Fit card verdict | Done. Outfit text unchanged. The card now shows original retail and era as "AI estimate · high/medium confidence", or "Unknown" when confidence is low. Also: % off computed in code, brand/style value with Classic or Trend-driven, condition as the seller states it, Worth it / Fair deal / Skip with 2–3 reasons, and the caption with a Copy button. | `tools.py::create_fit_card_full`, `BuyerVerdict.tsx` |
-| **B2** AI stylist per closet item | Done, outfit quality still improving (see results). A creative-director plan around the item: 2–3 pieces from other categories, with colour, proportion, fabric and occasion notes in your styles (quiet luxury by default). Each piece is matched against real listings, cache first. Hard rules: same category, gender, not kids, inside your budget, has a photo. One verification call keeps a listing only if it truly fits; otherwise the piece shows "Search this". Built automatically on add or edit, saved in `closet_outfits`. In live mode, snapshots older than 24 h are hidden. | `stylist.py`, `StylistOutfit.tsx` |
+| **B2** AI stylist per closet item | Done. 21 of 30 pieces show a real listing after the morning fixes. A creative-director plan around the item: 2–3 pieces from other categories, with colour, proportion, fabric and occasion notes in your styles (quiet luxury by default). Each piece is matched against real listings, cache first. Hard rules: same category, gender, not kids, inside your budget, has a photo. One verification call keeps a listing only if it truly fits; otherwise the piece shows "Search this". Built automatically on add or edit, saved in `closet_outfits`. In live mode, snapshots older than 24 h are hidden. | `stylist.py`, `StylistOutfit.tsx` |
 | **B3** Profile redesign | Done. Grouped cards: Shopping for (test account set to **Women**); sizes per category as multi-select chips (Dresses hidden for Men); optional measurements with an in/cm toggle and a how-to-measure tip; fit; 16 styles; 18 colours in one row on desktop; budget min–max. All of these feed search, ranking and styling. | `ProfileForm.tsx`, migration 0001 |
 | **B4** Search filters | Done. Price range, Size, Condition, Colour, Gender, Listed within, Location, Store. Phone: a Filters bottom sheet; desktop: dropdown chips. Pre-filled from the profile. Location is visible but disabled ("Not available for these stores"). | `FilterBar.tsx`, `tools.search_with_status` |
 | **C** Ready to deploy | Done. `render.yaml` (production, live data, CORS origins plus an optional preview regex, autoDeploy off), `frontend/vercel.json` (security headers, `/dev/*` redirected away), and the beginner guide `docs/DEPLOY.md`. | |
@@ -115,26 +123,32 @@ All four were applied successfully and are recorded in `public.schema_migrations
 **Old (MVP run, `results/run_2026-10-19_0318_mvp.md`):** criteria 1–5 all MET
 (5/5, 5/5, 5/5, 5/5, 5/5); buyer voice 20/20; outfit names a closet item 15/15.
 
-**New:** `run_eval.py` now checks all 7 criteria automatically (the old 5 plus
-#6 auto-relax and #7 clarifying question) and adds judge scores. **The full
-5-try run was not executed** (see the top note). What did run:
+**New (`results/run_2026-10-19_0942_v2.md`, 5 tries per scenario, fixtures):**
+criteria 1–7 all MET (5/5 each, including #6 auto-relax and #7 clarifying
+question); buyer voice 25/25 fit cards; outfit names a closet item 20/20.
+Judge scores for only **4 of 25 tries** (daily judge quota ran out): outfit
+4.25 (style_match 1.75, gender 5.0, colour 4.75, proportion 4.75, completeness
+5.0), fit card 5.0 on all three. With 4 tries, style_match is too thin a sample
+to act on. It's the first thing to check when the full judge run happens. 149 model
+calls (145 flash-lite, 4 flash).
 
 | Check | Result |
 |---|---|
-| Unit tests | **92 run, all pass** (6 integration tests skipped by default), including 39 new offline v2 tests. Same suite green on GitHub Actions. |
+| Unit tests | **93 run, all pass** (6 integration tests skipped by default), including 40 offline v2 tests (2 new checks added this morning). Same suite green on GitHub Actions. |
 | Eval harness, 1 try per scenario, model mocked (no calls) | 7/7 checks pass |
 | Live Gemini planner, 3 requests | relax → retry with a fit card; "something nice" → one question; normal path in 4 calls |
 | Live end-to-end A1 + A4 (`results/live_e2e_2026-10-19_0605.md`) | 4/4 as expected: guest and test-account "white denim pants" show **no clear mismatches** in 20 results; "…size XXS" relaxes the size once and says so; "something nice" asks a question and does no search |
-| Stylist judge, batch run 1 (`results/stylist_eval_2026-10-19_0550.md`) | **average 4.82 / 5** over 10 outfits. Note: only 6 of 30 pieces got a listing, so it mostly grades the plans. The fix for that (decision 10 plus re-search rounds) was in run 2, which was stopped. |
-| Playwright | Guest MVP + v2 tests at 375 and 1280 px: **20/20 pass** (after one selector fix). Signed-in v2: profile 2/2, auto-tag 2/2, home + traces 2/2 (after a selector fix; the rerun with the rebuilt app didn't happen). **Not run with v2 code:** the MVP signed-in smoke tests and the P8 outfit test. |
+| Stylist judge, batch run 1 (`results/stylist_eval_2026-10-19_0550.md`) | **average 4.82 / 5** over 10 outfits. Note: only 6 of 30 pieces got a listing, so it mostly grades the plans. |
+| Stylist rebuild (`results/stylist_eval_2026-10-19_0929.md`) | **21 of 30 pieces with a real listing**, every outfit at least 1; three are 3/3 (lilac blouse, denim jacket, camel jacket). 0 RapidAPI calls, 10 flash-lite calls. **No judge scores** (daily quota). The same cream trousers and Everlane loafers appear in three outfits, because the cached pool is small. |
+| Playwright (rebuilt app, fixtures API) | **34/34 pass** in one run (5.7 min), 17 tests × 375 px and 1280 px: guest MVP, signed-in MVP smoke (home/closet/item/saved/profile, search with own closet, add + delete item), guest v2 (A1, B1/A5, B4), signed-in v2 (B3, **P8 stylist outfit + collage**, A3, B4/A2). |
 | Frontend build, lint, typecheck | Clean |
 
 ## Live calls used tonight
 
 | Service | Used | Limit given |
 |---|---|---|
-| Fashion Resale API (RapidAPI) | **20** live calls: 5 in stylist run 1, 13 in stylist run 2, 2 in the A1/A4 check. All went through the quota counter (now **28/40** for October) and are cached for 24 h. | 25 |
-| Gemini | **187** calls: 127 `flash-lite`, 10 `flash` (judge), 50 embedding requests. Counted in `backend/.cache/gemini_ledger.json`. | ~500 |
+| Fashion Resale API (RapidAPI) | **20** live calls: 5 in stylist run 1, 13 in stylist run 2, 2 in the A1/A4 check. All went through the quota counter (now **28/40** for October) and are cached for 24 h. **0** more this morning. | 25 |
+| Gemini | **187** overnight: 127 `flash-lite`, 10 `flash` (judge), 50 embedding requests. This morning about 250 more (mostly the eval's 145 flash-lite, plus the outfit rebuilds and debugging). Ledger for Oct 19: 373 flash-lite, 15 flash, 52 embedding. Counted in `backend/.cache/gemini_ledger.json`. | ~500 |
 
 ## Hand-test checklist
 
