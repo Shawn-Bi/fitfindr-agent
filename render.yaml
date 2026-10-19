@@ -1,0 +1,39 @@
+# Render blueprint for the FitFindr API (prepared, not deployed — DECISIONS.md #5).
+# Production refuses to start with FITFINDR_DATA_MODE=fixtures, so it runs live:
+# every RapidAPI call is counted in Supabase api_usage and stops at 40/month/host.
+services:
+  - type: web
+    name: fitfindr-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: PYTHONUTF8
+        value: "1"
+      - key: APP_ENV
+        value: production
+      - key: FITFINDR_DATA_MODE
+        value: live
+      - key: FRONTEND_ORIGINS        # the Vercel URL, e.g. https://fitfindr.vercel.app
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RESALE_API_HOST
+        sync: false
+      - key: ETSY_API_HOST
+        sync: false
+      - key: FB_MARKETPLACE_HOST
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
