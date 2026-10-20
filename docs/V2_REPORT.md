@@ -1,9 +1,100 @@
-# v2 build report — 2026-10-19 (branch `v2`)
+# v2 build report — 2026-10-19, final status 2026-10-20 (branch `v2`)
 
 Built unattended from `CLAUDE.md`, `docs/PRD.md`, `docs/DECISIONS.md` and the
 v2 brief. Branch `v2` was created from `mvp`, committed in small steps and
 pushed; `main` and `mvp` were not touched, nothing was force-pushed, nothing was
 deployed, and no accounts or paid services were created.
+
+## Final status — 2026-10-20 (after the first deploy)
+
+**Deploy check (nothing changed in Vercel, Render or Supabase):** production
+matches the code. Render builds branch `v2` from `backend/` with the
+`render.yaml` commands, auto-deploy off, live commit `eed8a2c`; its env var
+names match `render.yaml`. The Vercel bundle points at
+`https://fitfindr-api.onrender.com` and the same Supabase project. CORS allows
+both Vercel URLs and the team's preview URLs and rejects other origins.
+Supabase Site URL and redirect URLs cover `https://fitfindr-ten.vercel.app/**`
+and `http://localhost:3000/**`. `main` is the old MVP and isn't used by production.
+
+**Facebook Marketplace:** retried once, still HTTP 403 "You are not subscribed
+to this API". It stays "Coming soon"; the steps to unlock it are in `BLOCKERS.md`.
+
+**Why criteria 1, 4 and 6 failed** (`results/run_2026-10-19_1350_fixes.md`): the
+flash-lite daily quota was spent, so the eval silently used the fallback model
+(`gemini-3-flash`, 20 requests a day). The outfit call used its last request
+and the fit-card call got HTTP 429. With no fallback for the fit card, the
+agent dropped it, which failed #1, #4 and #6 (all three need a card). On
+`/search/style` the outfit was thrown away too. Render's logs show the
+same thing happening in production. Fixes (`24c5fbc`, 6 new tests):
+- When the model is unavailable, the fit card falls back to a caption written
+  in code ("Found this … for $X on Store."), in the buyer's voice and with the
+  exact facts. The outfit is kept. The card is marked `written_by: "code"`,
+  and the eval report counts these cards.
+- `run_eval.py` grades only the main model. The fallback is off unless you
+  pass `--allow-fallback`. When the daily quota runs out, it stops and writes
+  the report marked **INCOMPLETE** (exit 2) rather than grading a different model.
+- The judge grades all tries of a scenario in one call (5 calls per full run
+  instead of 25), which fits the judge's 20-a-day free tier.
+
+**Full eval on the main model: not finished.** It started at 00:02 Pacific as
+planned, but Claude Code stopped it at 03:04 local because the machine was
+low on memory. By then, scenario 1 (matching query) had **4 of 4 tries PASS**
+on `gemini-3.5-flash-lite`, each with a model-written fit card. No report file
+was written and the judge never ran. Today's quota left: about 470 flash-lite
+requests and all 20 judge requests. To run it (about 40 minutes; close other
+apps first):
+```
+cd backend; $env:PYTHONUTF8=1; $env:FITFINDR_DATA_MODE='fixtures'; $env:FITFINDR_PLANNER='gemini'
+python run_eval.py --label v2-final
+```
+It worked if it ends with a `results/run_…_v2-final.md` showing all 7
+criteria MET. Exit code 2 means a daily quota ran out; run it again after
+midnight Pacific.
+
+**Other fixes:** `/stores` and the search-status check read each store's
+monthly count once instead of once per store: 2 Supabase reads instead of 5
+(`f3d4477`). Every test module blanks `RAPIDAPI_KEY`, however unittest is
+started (`16a0f71`).
+
+| Check | Result |
+|---|---|
+| Unit tests | **131 pass**, 6 integration tests skipped; same result with `python -m unittest` and with `discover -s tests` |
+| Playwright, local fixtures servers, one width at a time | **375 px 19/19, 1280 px 19/19** |
+| Production smoke test | Home and login load at 375 and 1280 px with no sideways scroll; "denim jacket" at 375 px showed 44 listings (Etsy from cache, resale paused), 0 RapidAPI calls |
+
+**Live calls used today:** RapidAPI **1** (the FB probe: 403, logged; FB 2/40).
+Fashion Resale **0**: it is already at **40/40** for October because of
+production searches, so it is paused until Nov 1 and serves its cache. Etsy
+**0** (8/40). Gemini (ledger for Oct 20): 26 flash-lite (5 debugging, about
+21 eval), 3 `gemini-3-flash-preview` (reproducing the bug), 1 embedding, 0 judge.
+
+### 手动测试清单（中文）
+
+先按下面"重新部署"的步骤把新版本发到 Render 和 Vercel，然后在
+https://fitfindr-ten.vercel.app 用手机宽度（375 px）和电脑宽度（1280 px）各试一遍，页面都不应该能左右滑动。
+
+**真实搜索**
+- [ ] 首页搜索 **denim jacket**：出现真实商品（有图片、价格、店铺名），点 "View on …" 跳到原店铺页面。
+- [ ] 结果页顶部显示每个店铺的状态：Depop/Poshmark/Mercari/eBay 本月额度用完时显示"已暂停，11 月 1 日恢复"，不会出现假商品。
+- [ ] 最佳匹配下面有穿搭建议和 Fit card（结论、理由、文案、**Copy caption** 按钮）。
+
+**即时筛选**
+- [ ] 结果页改价格、尺码、成色、店铺：列表马上变化，不重新加载页面，也不消耗新的 API 调用。
+- [ ] 店铺选 Etsy：只剩 Etsy 商品；清除筛选后恢复全部。
+- [ ] Location 筛选是灰色的，提示"这些店铺不支持"（FB 未接入）。
+
+**Etsy**
+- [ ] 搜索结果里有 Etsy 商品，价格是美元，链接打开 etsy.com。
+- [ ] Facebook Marketplace 显示 "Coming soon"（还未订阅，接口返回 403）。
+
+**衣橱穿搭（带图片）**
+- [ ] 登录后进入 Closet，点任意一件衣服：出现 "Finds that go with this"，有标题、配色、2–3 件其他类别单品，每件要么是真实商品图片（View on …），要么是 "Search this"。
+- [ ] 穿搭拼图里同时有你衣橱的照片和找到的商品图片。
+- [ ] 添加一件新衣服并上传照片：显示"Reading your photo…"，字段自动填好并带 **AI suggested** 标记。
+
+**个人资料尺码**
+- [ ] Profile 里选 Women / Men：各类别的尺码随之变化（选 Men 时 Dresses 消失）。
+- [ ] 填尺码和预算后保存，刷新页面数值还在；回到首页，筛选里已预填价格和性别。
 
 > **Finished the morning after (Oct 19, 09:15–09:55)**, one step at a time.
 > The overnight run had been stopped around 06:15 because the machine ran

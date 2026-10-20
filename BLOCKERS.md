@@ -58,11 +58,10 @@ Full v2 details: `docs/V2_REPORT.md`.
 8. **npm audit** advisories in build tooling from `create-next-app@15` (not in
    shipped browser code); `npm audit fix --force` would jump major versions.
 
-9. **Judge scores still to collect** (needs the judge quota, which resets at
-   midnight Pacific time): the v2 eval has scores for 4 of 25 tries, and the rebuilt stylist
-   outfits (21/30 pieces with a listing) have none. Commands are at the top of
-   `docs/V2_REPORT.md`. Re-score the outfits before about 06:10 Oct 20, while
-   the cached searches are still under 24 h old, so it needs no RapidAPI calls.
+9. **Full main-model eval with judge still to run.** The Oct 20 run started at
+   00:02 Pacific but was stopped at 03:04 local because the machine ran low on memory
+   (scenario 1: 4/4 PASS before it stopped; no judge scores yet). The judge now needs only
+   5 calls per run. The command is in "Final status" at the top of `docs/V2_REPORT.md`.
 
 10. **AI preview pictures need a paid Gemini tier.** All three image models on
    this key (`gemini-2.5-flash-image`, `gemini-3.1-flash-image`,
