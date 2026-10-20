@@ -80,7 +80,7 @@ def fetch_candidates(query: str, max_price: float | None = None,
             raw = adapter.fetch(query, max_price=max_price, min_price=min_price)
             cache.put(key, adapter.FIXTURE_PREFIX, raw)
             listings.extend(adapter.parse(raw))
-            statuses += [quota.status(adapter.SOURCE, p) for p in adapter.PLATFORMS]
+            statuses += quota.statuses(adapter.SOURCE, adapter.PLATFORMS)
         except quota.QuotaPaused as paused:
             statuses += _statuses(adapter, "paused", resumes=paused.resumes)
         except Exception:  # noqa: BLE001 — one broken store must not break search

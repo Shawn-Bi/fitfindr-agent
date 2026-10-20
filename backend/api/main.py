@@ -205,7 +205,7 @@ def stores():
             statuses += [{"platform": p, "status": "fixtures"} for p in adapter.PLATFORMS]
         else:
             try:
-                statuses += [quota.status(adapter.SOURCE, p) for p in adapter.PLATFORMS]
+                statuses += quota.statuses(adapter.SOURCE, adapter.PLATFORMS)
             except quota.QuotaUnknown:
                 statuses += [{"platform": p, "status": "error"} for p in adapter.PLATFORMS]
     return {"data_mode": config.DATA_MODE, "stores": catalog.store_panel(statuses, [])}

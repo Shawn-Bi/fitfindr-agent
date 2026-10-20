@@ -174,6 +174,12 @@ class QuotaTest(unittest.TestCase):
         self.assertEqual(ctx.exception.resumes, quota.resumes_on())
         self.assertEqual(quota.status("RESALE_API_HOST", "ebay")["status"], "paused")
 
+    def test_one_count_read_per_host(self):
+        with mock.patch.object(self.store, "get", wraps=self.store.get) as get:
+            out = quota.statuses("RESALE_API_HOST", ("depop", "poshmark", "mercari", "ebay"))
+        self.assertEqual(get.call_count, 1)
+        self.assertEqual([s["status"] for s in out], ["active"] * 4)
+
     def test_unreadable_counter_fails_closed(self):
         broken = mock.Mock(get=mock.Mock(side_effect=OSError("down")))
         quota.use_store(broken)

@@ -170,6 +170,13 @@ def status(source: str, platform: str, now: dt.datetime | None = None) -> dict:
     return {"platform": platform, "status": "active"}
 
 
+def statuses(source: str, platforms, now: dt.datetime | None = None) -> list[dict]:
+    """status() for every platform behind one host, reading its count once (Fashion Resale = 4 stores)."""
+    if is_paused(source, now):
+        return [{"platform": p, "status": "paused", "resumes": resumes_on(now)} for p in platforms]
+    return [{"platform": p, "status": "active"} for p in platforms]
+
+
 def migrate_local_file() -> None:
     """One-off: copy counts from the old backend/.quota.json into api_usage (never lowers a count)."""
     path = config.ROOT / ".quota.json"
