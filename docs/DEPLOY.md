@@ -11,8 +11,9 @@ file — only into the Render and Vercel dashboards.
 |---|---|
 | App (share this) | https://fitfindr-ten.vercel.app |
 | API | https://fitfindr-api.onrender.com (`/health` → `{"ok":true,"data_mode":"live","env":"production"}`) |
-| Render service | `fitfindr-api` (`srv-dbb6bs4s728c73ffegpg`), workspace TradeAgent, free plan, Oregon, auto-deploy off |
+| Render service | `fitfindr-api` (`srv-dbb6bs4s728c73ffegpg`), workspace TradeAgent, free plan, Oregon, branch `v2`, root `backend`, auto-deploy off |
 | Vercel project | `fitfindr`, team `shawn-9964`, Root Directory `frontend` |
+| Checked 2026-10-20 | Render runs `eed8a2c` from `v2`; its 18 env var names match `render.yaml`. Vercel serves v2 with the Render URL and the same Supabase project. Supabase Site URL and redirect URLs point at the Vercel URL (plus localhost). Nothing mismatched. |
 | CORS on Render | `FRONTEND_ORIGINS=https://fitfindr-ten.vercel.app,https://fitfindr-shawn-9964.vercel.app`, `FRONTEND_ORIGIN_REGEX=^https://fitfindr-[a-z0-9]+-shawn-9964\.vercel\.app$` |
 
 Notes from this deploy:
@@ -171,9 +172,9 @@ dashboard → your project → **Authentication** → **URL Configuration**:
 
 **RapidAPI quota:** each store host stops itself at 40 calls a month and shows
 "Paused until …". After the v2 fixes on Oct 19 the October counts are
-Fashion Resale 34/40 (see `docs/V2_REPORT.md`), Etsy 3/40, FB Marketplace 1/40,
-so October has only a few new searches left; the cache keeps repeat searches free
-and November starts at 0. Check the count any time with
+after the first deploy (Oct 20) Fashion Resale is at 40/40 (paused until Nov 1),
+Etsy 8/40, FB Marketplace 2/40. Until Nov 1 new searches show Etsy only; the cache
+keeps repeat searches free and November starts at 0. Check the count any time with
 `python -m sources.quota` in `backend` (with `.env` loaded).
 
 ## If something goes wrong

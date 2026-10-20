@@ -1,4 +1,4 @@
-# Blockers and open items — updated for the v2 hand-test fixes, 2026-10-19 (afternoon)
+# Blockers and open items — updated 2026-10-20 (after the first deploy)
 
 Things I couldn't finish or that need the owner. Nothing here blocks local use.
 Full v2 details: `docs/V2_REPORT.md`.
@@ -13,7 +13,8 @@ Full v2 details: `docs/V2_REPORT.md`.
 
 3. **Facebook Marketplace is not connected: the RapidAPI host isn't subscribed.**
    Etsy is now live. For FB Marketplace one probe call (`GET /`, counted: 1/40
-   for October) answered **HTTP 403 "You are not subscribed to this API."**, and
+   for October) answered **HTTP 403 "You are not subscribed to this API."**;
+   **retried 2026-10-20 05:05 UTC: same 403** (2/40). And
    the listing's endpoint docs aren't public, so there was nothing to record a
    fixture from. The store stays "Coming soon"; the profile's ZIP/city field and
    the Location filter (FB only, disabled for now) are ready. What you need to do:
@@ -38,8 +39,14 @@ Full v2 details: `docs/V2_REPORT.md`.
    day**. Both ran out on Oct 19. When embeddings are out, search and the
    stylist rank by keywords right away (the response says `ranking: keyword`);
    nothing fails. A paid tier, or embedding listings ahead of time, would make
-   semantic ranking consistent, and a full 5-try judged eval (about 35 judge
-   calls) needs a paid tier or two days.
+   semantic ranking consistent. The eval now grades each scenario's 5 tries in
+   one judge call (5 calls a run, not 25), so it fits the free tier.
+   The fallback model (`gemini-3-flash`) allows only **20 requests a day**, so
+   it can't stand in for the main model for long: when both are out, the fit
+   card's caption is written in code from the listing (no verdict) and the
+   outfit stays. The production API ran out of `gemini-3.5-flash-lite` quota on
+   the night of Oct 19 (seen in the Render logs). The free tier is shared by
+   everyone using the site; a paid key is the real fix.
 
 6. **Free Render plan sleeps after 15 minutes.** A closet-item outfit that is
    still being built when the server sleeps is lost; the page shows "Style this
@@ -66,8 +73,9 @@ Full v2 details: `docs/V2_REPORT.md`.
    piece in a different colour". Enabling billing on the Gemini key turns
    previews on with no code change.
 
-11. **October RapidAPI quota is nearly used.** See `docs/V2_REPORT.md` for the
-   counts after these fixes. Repeat searches are free for 24 h; new searches
-   pause at 40 per host until Nov 1. One Etsy call during this session leaked
+11. **October RapidAPI quota: Fashion Resale is used up.** On Oct 20 the
+   counts are Fashion Resale **40/40 (paused until Nov 1: no Depop, Poshmark,
+   Mercari or eBay results for new searches)**, Etsy 8/40, FB Marketplace 2/40.
+   Repeat searches are free for 24 h; Etsy keeps working for new searches. One Etsy call during this session leaked
    from a unit test before Etsy was mocked there; it is counted in `api_usage`
    and the tests can no longer reach RapidAPI at all.
