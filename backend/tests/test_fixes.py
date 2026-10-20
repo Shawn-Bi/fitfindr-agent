@@ -13,6 +13,7 @@ import os
 import unittest
 from unittest import mock
 
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
 os.environ["FITFINDR_EMBEDDINGS"] = "0"
 os.environ["FITFINDR_PLANNER"] = "rules"
@@ -279,6 +280,76 @@ class FallbackModelTest(unittest.TestCase):
             with self.assertRaises(ModelUnavailable):
                 generate.generate("hi", cache=False)
         self.assertEqual(req.call_count, 1)
+
+
+class ModelOutTest(unittest.TestCase):
+    """Eval criteria 1, 4 and 6 failed when the fallback model's 20-a-day quota ran out mid-run."""
+    daily = "Daily free-tier quota used up for this model; it resets at midnight Pacific time."
+
+    def setUp(self):
+        self.item = listing("Black corduroy pants with floral embroidery", platform="mercari", price=17.5)
+
+    def test_fit_card_is_written_in_code_when_the_model_is_out(self):
+        import run_eval
+        from generate import ModelUnavailable
+        with mock.patch("tools.generate", side_effect=ModelUnavailable(self.daily)):
+            card = tools.create_fit_card_full({"text": "Wear with boots."}, self.item)
+        self.assertEqual(card["written_by"], "code")
+        self.assertIsNone(card["verdict"])
+        self.assertEqual(run_eval.check_fit_card(card["caption"], self.item), (True, "ok"))
+        self.assertEqual(tools.seller_voice(card["caption"]), [])
+
+    def test_model_card_says_who_wrote_it(self):
+        with mock.patch("tools.generate", return_value='{"caption": "Scored it!", "verdict": "Fair deal"}'):
+            card = tools.create_fit_card_full({"text": "Wear with boots."}, self.item)
+        self.assertEqual(card["written_by"], "model")
+        self.assertEqual(card["verdict"]["verdict"], "Fair deal")
+
+    def test_agent_keeps_outfit_and_card_when_the_card_model_is_out(self):
+        import agent
+        import run_eval
+        from generate import ModelUnavailable
+        with mock.patch("agent.suggest_outfit", return_value={"text": "Wear with boots.", "item_ids": []}), \
+             mock.patch("tools.generate", side_effect=ModelUnavailable(self.daily)):
+            session = agent.run_agent("corduroy pants under $40", {"items": []},
+                                      search=lambda **_: [self.item], planner="rules")
+        self.assertIsNone(session["styling_error"])
+        self.assertEqual(session["fit_card_by"], "code")
+        self.assertTrue(run_eval.check(4, {"session": session, "crashed": None, "styled_ids": []})[0])
+
+    def test_style_route_keeps_the_outfit_when_the_card_model_is_out(self):
+        from generate import ModelUnavailable
+        client = TestClient(app)
+        style_limiter._hits.clear()
+        item = etsy.parse(ETSY_RAW)[0]
+        with mock.patch("api.main.suggest_outfit", return_value={"text": "Wear it with loafers.", "item_ids": []}), \
+             mock.patch("tools.generate", side_effect=ModelUnavailable(self.daily)):
+            body = client.post("/search/style", json={"q": "white denim pants", "listing": item}).json()
+        self.assertEqual(body["styling"]["text"], "Wear it with loafers.")
+        self.assertIn("on Etsy", body["fit_card"])
+        self.assertIsNone(body["fit_verdict"])
+
+    def test_spent_daily_quota_is_remembered(self):
+        import generate
+        from generate import ModelUnavailable
+        generate.daily_exhausted.clear()
+        error = Exception("429 RESOURCE_EXHAUSTED quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        with mock.patch("generate._get_client"), mock.patch("generate._wait_for_slot"):
+            with self.assertRaises(ModelUnavailable):
+                generate._request("some-model", mock.Mock(side_effect=error))
+        self.assertEqual(generate.daily_exhausted, {"some-model"})
+        generate.daily_exhausted.clear()
+
+    def test_judge_grades_several_runs_in_one_call(self):
+        import judge
+        run = {"selected_item": self.item, "outfit_suggestion": {"text": "Boots."}, "fit_card": "Found it!"}
+        scored = {d: {"score": 4, "reason": "fine"} for d in judge.OUTFIT_DIMS + judge.CARD_DIMS}
+        with mock.patch("judge._ask", return_value={"runs": [scored, scored]}) as ask:
+            out = judge.judge_search_many([run, {"selected_item": None}, run])
+        self.assertEqual(ask.call_count, 1)
+        self.assertEqual([o and o["outfit_avg"] for o in out], [4.0, None, 4.0])
+        with mock.patch("judge._ask", return_value={"runs": [scored]}):      # wrong length: no guessing
+            self.assertEqual(judge.judge_search_many([run, run]), [None, None])
 
 
 class ProfileSizesTest(unittest.TestCase):

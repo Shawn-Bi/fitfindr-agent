@@ -58,6 +58,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # what suggest_outfit returned
         "fit_card": None,            # the caption create_fit_card wrote
         "fit_verdict": None,         # the buyer's verdict around it (B1)
+        "fit_card_by": None,         # "model", or "code" when the model was unavailable
         "error": None,               # set when the run ended with nothing to show
         "styling_error": None,       # set when the model was unavailable
         "relaxed": None,             # {"dropped", "message"} when relax_search ran
@@ -285,8 +286,9 @@ class _Run:
     def do_card(self):
         full = create_fit_card_full(self.s["outfit_suggestion"], self.s["selected_item"])
         self.s["fit_card"], self.s["fit_verdict"] = full["caption"], full["verdict"]
+        self.s["fit_card_by"] = full.get("written_by")
         self.done = True
-        return {"caption": full["caption"][:200],
+        return {"caption": full["caption"][:200], "written_by": full.get("written_by"),
                 "verdict": (full["verdict"] or {}).get("verdict")}
 
     def do_ask(self, question, suggestions):

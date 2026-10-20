@@ -43,6 +43,7 @@ _prompt_tokens = 0
 _output_tokens = 0
 _client = None
 _budget_warned = False
+daily_exhausted: set[str] = set()   # models whose free-tier daily quota ran out in this process
 
 
 class QuotaGuard(Exception):
@@ -376,6 +377,7 @@ def _request(model: str, do_call, retries: int | None = None):
                 raise ModelUnavailable(_explain(exc)) from exc
             # A per-day quota won't clear in a minute: retrying only wastes the run's time.
             if "perday" in message:
+                daily_exhausted.add(model)
                 raise ModelUnavailable(
                     "Daily free-tier quota used up for this model; it resets at midnight Pacific time."
                 ) from exc

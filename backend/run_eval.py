@@ -5,12 +5,18 @@ Run the scenarios repeatedly and write the results down.
     python run_eval.py --label v2          five tries, the default, with the judge
     python run_eval.py --tries 10          more tries
     python run_eval.py --no-judge          skip the LLM-as-judge scores
+    python run_eval.py --allow-fallback    let a spent daily quota switch to the fallback model
 
 Every scenario in `scenarios.py` runs five separate times with caching off,
 so five tries are five real answers. Each try is scored automatically
 against its criterion in `criteria.md` (the checks are below, one function
 per criterion), and every completed try is graded by the LLM judge
-(judge.py): outfit quality on five dimensions and the fit card on three.
+(judge.py): outfit quality on five dimensions and the fit card on three,
+one judge call per scenario (judge_search_many).
+
+The eval measures config.MODEL, so the fallback model is off by default: if
+a daily quota runs out mid-run, the run stops, writes what it has, marked
+INCOMPLETE, and exits with status 2. Rerun after midnight Pacific time.
 
 The run log goes to results/run_<date>_<label>.md with the criteria table,
 the judge averages, the model calls spent and the full output of each try.
@@ -131,6 +137,8 @@ def main():
                         help="tries per scenario (default 5, matching your criteria)")
     parser.add_argument("--label", default="", help="a name for this run, e.g. 'before'")
     parser.add_argument("--no-judge", action="store_true", help="skip the LLM-as-judge scores")
+    parser.add_argument("--allow-fallback", action="store_true",
+                        help="use config.FALLBACK_MODEL when a daily quota runs out (off: the run stops)")
     args = parser.parse_args()
 
     problems = scenario_module.validate()
@@ -145,6 +153,8 @@ def main():
 
     # Caching off. Five tries have to be five real answers.
     config.CACHE_ENABLED = False
+    if not args.allow_fallback:
+        config.FALLBACK_MODEL = ""   # grade the main model, never a stand-in
     print(f"Cache is OFF for this run — that's deliberate. Planner: {config.AGENT_PLANNER}\n")
 
     import generate
@@ -160,23 +170,35 @@ def main():
         for attempt in range(1, args.tries + 1):
             record = run_once(scenario)
             record["check"] = check(scenario["criterion"], record)
-            session = record["session"] or {}
-            if not args.no_judge and session.get("outfit_suggestion"):
-                try:
-                    record["judge"] = judge.judge_search(session)
-                except Exception as exc:  # noqa: BLE001
-                    record["judge"] = None
-                    print(f"    judge failed: {config.redact(exc)[:80]}")
             tries.append(record)
             ok, why = record["check"]
             print(f"  try {attempt}: {'PASS' if ok else 'FAIL'} — {why[:90]}")
+            if generate.daily_exhausted:
+                break
+
+        if not args.no_judge and not generate.daily_exhausted:
+            sessions = [r["session"] or {} for r in tries]
+            if any(s.get("outfit_suggestion") for s in sessions):
+                try:
+                    for record, scores in zip(tries, judge.judge_search_many(sessions)):
+                        record["judge"] = scores
+                except Exception as exc:  # noqa: BLE001
+                    print(f"    judge failed: {config.redact(exc)[:80]}")
 
         rows.append({"scenario": scenario, "tries": tries})
         print()
+        if generate.daily_exhausted:
+            stopped = ", ".join(sorted(generate.daily_exhausted))
+            print(f"STOPPED: daily free-tier quota used up for {stopped}. "
+                  "Rerun after midnight Pacific time; this run is INCOMPLETE.")
+            args.incomplete = stopped
+            break
 
     after = generate.ledger()
     spent = {m: after.get(m, 0) - before.get(m, 0) for m in after if after.get(m, 0) - before.get(m, 0)}
     write_report(rows, args, spent)
+    if getattr(args, "incomplete", None):
+        sys.exit(2)
 
 
 def _avg(values):
@@ -199,6 +221,9 @@ def write_report(rows, args, spent):
     lines = [
         f"# Run log{f' — {args.label}' if args.label else ''}",
         "",
+    ] + ([f"> **INCOMPLETE:** the daily free-tier quota ran out for {args.incomplete}; "
+          "the run stopped there. Rerun after midnight Pacific time.", ""]
+         if getattr(args, "incomplete", None) else []) + [
         "- Produced by: `run_eval.py::main`",
         f"- Agent: `agent.py::run_agent`, planner `{config.AGENT_PLANNER}` · tools: `tools.py`",
         f"- Tries per scenario: {n}, caching off · data: {config.DATA_MODE}",
@@ -258,6 +283,9 @@ def write_report(rows, args, spent):
     with_verdict = sum(1 for v in verdicts if v and v.get("verdict"))
     lines += ["", "## Automatic check: buyer's verdict present", "",
               f"Fit cards with a Worth it / Fair deal / Skip verdict: **{with_verdict} / {len(verdicts)}**", ""]
+    by_code = sum(1 for row in rows for r in row["tries"] if (r["session"] or {}).get("fit_card_by") == "code")
+    lines += [f"Fit cards written in code because the model was unavailable: **{by_code}**"
+              + (" (they pass the fact checks but have no verdict)" if by_code else ""), ""]
 
     # LLM-as-judge averages.
     judged = [r["judge"] for row in rows for r in row["tries"] if r.get("judge")]

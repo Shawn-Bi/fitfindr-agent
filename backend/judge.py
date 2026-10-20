@@ -4,6 +4,8 @@ and stronger model (config.JUDGE_MODEL) at temperature 0.
 
     judge_search(session, prefs)   one call: the outfit (5 dimensions) and the
                                    fit card (3 dimensions) of one agent run
+    judge_search_many(sessions)    the same for several runs in one call (the eval:
+                                   one call per scenario, for the 20-a-day free tier)
     judge_stylist(outfit, item, prefs)   a B2 stylist outfit (5 dimensions)
 
 Outfit dimensions: style_match, gender_match, colour_harmony, proportion,
@@ -94,6 +96,48 @@ def judge_search(session: dict, prefs: dict | None = None) -> dict | None:
     outfit_scores, card_scores = _scores(data, OUTFIT_DIMS), _scores(data, CARD_DIMS)
     return {"outfit": outfit_scores, "outfit_avg": average(outfit_scores),
             "card": card_scores, "card_avg": average(card_scores)}
+
+
+def judge_search_many(sessions: list[dict], prefs: dict | None = None) -> list[dict | None]:
+    """
+    Several runs of the same scenario in ONE judge call (the judge model's free
+    tier allows 20 calls a day; a 5-try eval has 25 runs to grade). Each run is
+    scored on its own, as judge_search would; runs without an outfit get None.
+    """
+    gradable = [i for i, s in enumerate(sessions) if s.get("selected_item") and s.get("outfit_suggestion")]
+    out: list[dict | None] = [None] * len(sessions)
+    if not gradable:
+        return out
+    dims = OUTFIT_DIMS + CARD_DIMS
+    blocks = []
+    for n, i in enumerate(gradable, 1):
+        s = sessions[i]
+        item, verdict = s["selected_item"], s.get("fit_verdict") or {}
+        closet = ", ".join(w.get("name", "") for w in (s.get("wardrobe") or {}).get("items") or []) or "empty"
+        blocks.append(
+            f"=== Run {n} ===\nTheir closet: {closet}\n"
+            f"Listing: {item['title'].splitlines()[0]} — ${item['price']:.2f} on {item['platform']}"
+            f" (condition: {item.get('condition') or 'not stated'})\n"
+            f"Outfit suggestion:\n{s['outfit_suggestion'].get('text')}\n"
+            f"Fit card caption:\n{s.get('fit_card')}\n"
+            f"Verdict: {verdict.get('verdict') or 'none'}; reasons: {verdict.get('reasons') or []}; "
+            f"retail estimate: {verdict.get('retail') or 'unknown'}")
+    prompt = (
+        "You are a strict fashion editor grading an AI shopping assistant. Below are "
+        f"{len(gradable)} separate runs. Grade each run on its own merits, independently of the "
+        "others. Score each dimension 1-5 (5 = excellent, 3 = acceptable, 1 = wrong).\n"
+        f"Shopper: {_shopper(prefs)}\n\n" + "\n\n".join(blocks) + "\n\n"
+        "Rubric:\n" + "\n".join(f"- {d}: {RUBRIC[d]}" for d in dims)
+        + f'\n\nAnswer with JSON only: {{"runs": [one object per run, in order, each {_answer_shape(dims)}]}}')
+    runs = _ask(prompt).get("runs")
+    if not isinstance(runs, list) or len(runs) != len(gradable):
+        return out
+    for i, data in zip(gradable, runs):
+        data = data if isinstance(data, dict) else {}
+        outfit_scores, card_scores = _scores(data, OUTFIT_DIMS), _scores(data, CARD_DIMS)
+        out[i] = {"outfit": outfit_scores, "outfit_avg": average(outfit_scores),
+                  "card": card_scores, "card_avg": average(card_scores)}
+    return out
 
 
 def judge_stylist(outfit: dict, item: dict, prefs: dict | None = None) -> dict:

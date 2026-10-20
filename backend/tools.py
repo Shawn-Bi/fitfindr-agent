@@ -24,7 +24,7 @@ import json
 import re
 
 import config
-from generate import generate, loads_json
+from generate import ModelUnavailable, QuotaGuard, generate, loads_json
 from sources import fetch_candidates
 
 
@@ -614,19 +614,33 @@ def create_fit_card(outfit, new_item: dict) -> str:
 
 VERDICTS = ("Worth it", "Fair deal", "Skip")
 CONFIDENCE = ("high", "medium", "low")
+STORE_NAMES = {"ebay": "eBay", "etsy": "Etsy", "depop": "Depop", "poshmark": "Poshmark",
+               "mercari": "Mercari", "fb_marketplace": "Facebook Marketplace"}
+
+
+def code_caption(item: dict) -> str:
+    """The caption written without the model: item, price and store once each, as the buyer."""
+    title = item["title"].split("\n")[0].strip()
+    store = STORE_NAMES.get(item["platform"], item["platform"])
+    price = float(item["price"])
+    shown = f"${price:.0f}" if price.is_integer() else f"${price:.2f}"
+    return f"Found this {title} for {shown} on {store}."
 
 
 def create_fit_card_full(outfit, new_item: dict) -> dict:
     """
-    Returns {"caption": str, "verdict": dict | None}. `caption` is exactly what
-    create_fit_card() returns (buyer voice, item + price + platform once
-    each). `verdict` is None when the model's answer couldn't be read; the
-    caption still stands.
+    Returns {"caption": str, "verdict": dict | None, "written_by": "model" | "code"}.
+    `caption` is exactly what create_fit_card() returns (buyer voice, item +
+    price + platform once each). `verdict` is None when the model's answer
+    couldn't be read; the caption still stands. When the model is unavailable
+    (quota, outage) the caption is written in code from the listing and there
+    is no verdict: the outfit the user already has must not be thrown away
+    because the caption step failed.
     """
     if isinstance(outfit, dict):
         outfit = outfit.get("text") or ""
     if not outfit or not outfit.strip():
-        return {"caption": create_fit_card(outfit, new_item), "verdict": None}
+        return {"caption": create_fit_card(outfit, new_item), "verdict": None, "written_by": "code"}
     import attributes
 
     condition = new_item.get("condition") or "not stated"
@@ -663,8 +677,12 @@ def create_fit_card_full(outfit, new_item: dict) -> dict:
         "- verdict: Worth it = clearly good value for its condition; Fair deal = roughly what it "
         "should cost; Skip = overpriced, poor condition, or a red flag. Give 2-3 reasons, each "
         "under 12 words.")
-    raw = generate(prompt, json_mode=True)
-    return parse_fit_card(raw, new_item, attributes.condition_bucket(new_item.get("condition")))
+    try:
+        raw = generate(prompt, json_mode=True)
+    except (ModelUnavailable, QuotaGuard, RuntimeError):
+        return {"caption": code_caption(new_item), "verdict": None, "written_by": "code"}
+    card = parse_fit_card(raw, new_item, attributes.condition_bucket(new_item.get("condition")))
+    return {**card, "written_by": "model"}
 
 
 def _num(value) -> float | None:
