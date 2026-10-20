@@ -12,6 +12,7 @@ import os
 import unittest
 from unittest import mock
 
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
 os.environ["FITFINDR_EMBEDDINGS"] = "0"         # no network: keyword ranking
 os.environ["FITFINDR_PLANNER"] = "rules"        # no network: the deterministic agent policy
@@ -234,7 +235,7 @@ class LiveModeSourcesTest(unittest.TestCase):
                             sources.cache_key(resale, "white jeans", None, None))
 
     def test_unit_tests_cannot_reach_rapidapi(self):
-        self.assertEqual(os.getenv("RAPIDAPI_KEY"), "")
+        self.assertTrue(not os.getenv("RAPIDAPI_KEY"), "RAPIDAPI_KEY must be blank in unit tests")  # never print it
 
 
 class CatalogTest(unittest.TestCase):

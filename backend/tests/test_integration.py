@@ -15,6 +15,7 @@ import json
 import os
 import unittest
 
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"
 
 import httpx  # noqa: E402

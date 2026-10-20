@@ -13,6 +13,7 @@ import os
 import unittest
 from unittest import mock
 
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
 os.environ["FITFINDR_EMBEDDINGS"] = "0"
 os.environ["FITFINDR_PLANNER"] = "rules"
