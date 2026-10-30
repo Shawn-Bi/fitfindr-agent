@@ -43,6 +43,7 @@ _prompt_tokens = 0
 _output_tokens = 0
 _client = None
 _budget_warned = False
+daily_exhausted: set[str] = set()   # models whose free-tier daily quota ran out in this process
 
 
 class QuotaGuard(Exception):
@@ -96,6 +97,26 @@ def clear_cache() -> int:
     return len(files)
 
 
+# ─── Reading JSON answers ─────────────────────────────────────────────────────
+
+
+def loads_json(raw: str):
+    """
+    Parse a JSON answer. Tolerates a ```json fence and trailing junk after the
+    first complete object (models sometimes add a stray "}"). Raises
+    ValueError (json.JSONDecodeError) when there is no JSON at all.
+    """
+    cleaned = re.sub(r"^```(?:json)?|```$", "", (raw or "").strip(), flags=re.M).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        starts = [i for i in (cleaned.find("{"), cleaned.find("[")) if i >= 0]
+        if not starts:
+            raise
+        obj, _ = json.JSONDecoder().raw_decode(cleaned[min(starts):])
+        return obj
+
+
 # ─── Pacing and guards ───────────────────────────────────────────────────────
 
 
@@ -124,6 +145,11 @@ def _wait_for_slot() -> None:
 
 def _check_budget() -> None:
     global _budget_warned
+    m = _meter.get()
+    if m is not None:   # inside one agent run: a per-run cap instead of the session's
+        if m["calls"] < config.RUN_REQUEST_BUDGET:
+            return
+        raise QuotaGuard(f"One run made {m['calls']} model calls (RUN_REQUEST_BUDGET); stopping it.")
     if _session_calls < config.SESSION_REQUEST_BUDGET:
         return
     if not _budget_warned:
@@ -172,30 +198,6 @@ def token_counts() -> dict:
         "output": _output_tokens,
         "total": _prompt_tokens + _output_tokens,
     }
-
-
-def _record_tokens(response) -> None:
-    """
-    Add one response's token counts to the session total.
-
-    The service reports them on `response.usage_metadata`. It is allowed to
-    report nothing, or half of it — and a missing count is never a good enough
-    reason to kill a run that already succeeded, so anything unexpected here is
-    dropped rather than raised.
-    """
-    global _prompt_tokens, _output_tokens
-    try:
-        meta = getattr(response, "usage_metadata", None)
-        if meta is None:
-            return
-        prompt = getattr(meta, "prompt_token_count", None)
-        output = getattr(meta, "candidates_token_count", None)
-        if isinstance(prompt, int):
-            _prompt_tokens += prompt
-        if isinstance(output, int):
-            _output_tokens += output
-    except Exception:  # noqa: BLE001 — counting must never break a working call
-        pass
 
 
 # ─── The call ────────────────────────────────────────────────────────────────
@@ -257,11 +259,154 @@ def _get_client():
     return _client
 
 
+# ─── Per-run meter and the call ledger ───────────────────────────────────────
+#
+# A meter counts the model calls, tokens and time of one agent run (one search,
+# one stylist outfit), for the trace saved with it. It lives in a context
+# variable, so two web requests running at once never mix their numbers.
+#
+# The ledger (.cache/gemini_ledger.json) counts every real call per day and
+# model, so a night's spend is a number you can read rather than estimate.
+
+import contextlib
+import contextvars
+import datetime as _dt
+import threading
+
+_meter: contextvars.ContextVar = contextvars.ContextVar("fitfindr_meter", default=None)
+_ledger_lock = threading.Lock()
+LEDGER = config.CACHE_DIR / "gemini_ledger.json"
+
+
+@contextlib.contextmanager
+def meter():
+    """
+    with generate.meter() as m:
+        ...                       # every model call in here is counted in m
+    m == {"calls", "prompt_tokens", "output_tokens", "by_model", "est_cost_usd"}
+    """
+    m = {"calls": 0, "prompt_tokens": 0, "output_tokens": 0, "by_model": {}, "est_cost_usd": 0.0}
+    token = _meter.set(m)
+    try:
+        yield m
+    finally:
+        _meter.reset(token)
+
+
+def _ledger_add(model: str) -> None:
+    day = _dt.date.today().isoformat()
+    with _ledger_lock:
+        try:
+            data = json.loads(LEDGER.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — missing or unreadable: start fresh
+            data = {}
+        data.setdefault(day, {})
+        data[day][model] = data[day].get(model, 0) + 1
+        config.CACHE_DIR.mkdir(exist_ok=True)
+        LEDGER.write_text(json.dumps(data, indent=1), encoding="utf-8")
+
+
+def ledger(day: str | None = None) -> dict:
+    """{model: calls} for one day (default today), from the ledger file."""
+    try:
+        data = json.loads(LEDGER.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return data.get(day or _dt.date.today().isoformat(), {})
+
+
+def _count(model: str, prompt: int = 0, output: int = 0) -> None:
+    """One real call: session totals, the active meter (if any) and the ledger."""
+    global _session_calls, _prompt_tokens, _output_tokens
+    _session_calls += 1
+    _prompt_tokens += prompt
+    _output_tokens += output
+    m = _meter.get()
+    if m is not None:
+        m["calls"] += 1
+        m["prompt_tokens"] += prompt
+        m["output_tokens"] += output
+        m["by_model"][model] = m["by_model"].get(model, 0) + 1
+        m["est_cost_usd"] += config.estimated_cost(model, prompt, output)
+    try:
+        _ledger_add(model)
+    except Exception:  # noqa: BLE001 — counting must never break a working call
+        pass
+
+
+def _tokens(response) -> tuple[int, int]:
+    """(prompt, output) tokens the service reported, 0 when it didn't."""
+    try:
+        meta = getattr(response, "usage_metadata", None)
+        prompt = getattr(meta, "prompt_token_count", None) if meta else None
+        output = getattr(meta, "candidates_token_count", None) if meta else None
+        return (prompt if isinstance(prompt, int) else 0, output if isinstance(output, int) else 0)
+    except Exception:  # noqa: BLE001
+        return 0, 0
+
+
+def _request(model: str, do_call, retries: int | None = None):
+    """
+    The one place a request leaves this process: budget check, pacing,
+    counting, retries on rate limits, readable errors. `do_call(client)`
+    makes the actual SDK call and returns the response. `retries` caps the
+    attempts (the web path passes 1 so a user never waits a minute for a
+    nice-to-have; it falls back instead).
+    """
+    _check_budget()
+    last_error: Exception | None = None
+    attempts = config.MAX_RETRIES if retries is None else max(1, retries)
+    for attempt in range(attempts):
+        _wait_for_slot()
+        try:
+            client = _get_client()
+            _call_times.append(time.monotonic())
+            response = do_call(client)
+            _count(model, *_tokens(response))
+            return response
+        except Exception as exc:  # noqa: BLE001 — surfaced below
+            last_error = exc
+            message = str(exc).lower()
+            rate_limited = (
+                "429" in message
+                or "resource" in message and "exhaust" in message
+                or "rate" in message and "limit" in message
+                or "503" in message or "overloaded" in message or "unavailable" in message
+            )
+            if not rate_limited:
+                raise ModelUnavailable(_explain(exc)) from exc
+            # A per-day quota won't clear in a minute: retrying only wastes the run's time.
+            if "perday" in message:
+                daily_exhausted.add(model)
+                raise ModelUnavailable(
+                    "Daily free-tier quota used up for this model; it resets at midnight Pacific time."
+                ) from exc
+            if attempt + 1 >= attempts:
+                break
+            backoff = _retry_delay(exc, attempt)
+            print(
+                f"  [rate limit] service pushed back. Waiting {backoff:.0f}s "
+                f"(attempt {attempt + 1} of {config.MAX_RETRIES}). This is "
+                f"the limiter doing its job, not a bug.",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(backoff)
+
+    raise RuntimeError(
+        f"Still rate limited after {config.MAX_RETRIES} attempts. Wait a "
+        f"minute and try again — your key is fine.\nLast error: {config.redact(last_error)}"
+    )
+
+
 def generate(
     prompt: str,
     system: str | None = None,
     cache: bool = True,
     temperature: float | None = None,
+    json_mode: bool = False,
+    model: str | None = None,
+    image: tuple[bytes, str] | None = None,
 ) -> str:
     """
     Send a prompt and get text back.
@@ -277,15 +422,24 @@ def generate(
         temperature: how much the model varies between runs. Defaults to
                 config.TEMPERATURE. Pass 0.0 when you want the same answer
                 every time.
+        json_mode: ask the model for a JSON response (application/json). The
+                return value is still the raw text; the caller parses it.
+        model:  which model; defaults to config.MODEL. The judge uses
+                config.JUDGE_MODEL.
+        image:  optional (bytes, mime type) sent with the prompt (photo
+                auto-tagging). Part of the cache key, by hash.
 
     Every call in this course goes through here. If you need to change how the
     model is called, change it in this one place.
     """
-    global _session_calls, _cache_hits
+    global _cache_hits
 
+    model = model or config.MODEL
     use_cache = cache and config.CACHE_ENABLED
     temperature = config.TEMPERATURE if temperature is None else temperature
-    key = _cache_key(prompt, system, temperature)
+    image_tag = f"\n[image {hashlib.sha256(image[0]).hexdigest()}]" if image else ""
+    key = _cache_key(prompt + ("\n[json]" if json_mode else "") + image_tag
+                     + (f"\n[model {model}]" if model != config.MODEL else ""), system, temperature)
 
     if use_cache:
         hit = _cache_read(key)
@@ -293,54 +447,142 @@ def generate(
             _cache_hits += 1
             return hit
 
-    _check_budget()
+    call_config = {"temperature": temperature}
+    if system:
+        call_config["system_instruction"] = system
+    if json_mode:
+        call_config["response_mime_type"] = "application/json"
+    contents = prompt
+    if image:
+        from google.genai import types
+        contents = [types.Part.from_bytes(data=image[0], mime_type=image[1]), prompt]
 
-    last_error: Exception | None = None
-    for attempt in range(config.MAX_RETRIES):
-        _wait_for_slot()
-        try:
-            client = _get_client()
-            _call_times.append(time.monotonic())
-            _session_calls += 1
+    try:
+        response = _request(model, lambda client: client.models.generate_content(
+            model=model, contents=contents, config=call_config))
+    except ModelUnavailable as exc:
+        # A spent daily quota won't come back today: answer with the fallback model instead.
+        if "daily" not in str(exc).lower() or not config.FALLBACK_MODEL or model == config.FALLBACK_MODEL:
+            raise
+        print(f"  [quota] {model} is out of daily quota; using {config.FALLBACK_MODEL}.",
+              file=sys.stderr, flush=True)
+        return generate(prompt, system=system, cache=cache, temperature=temperature,
+                        json_mode=json_mode, model=config.FALLBACK_MODEL, image=image)
+    text = (response.text or "").strip()
+    if use_cache:
+        _cache_write(key, text)
+    return text
 
-            call_config = {"temperature": temperature}
-            if system:
-                call_config["system_instruction"] = system
-            kwargs = {
-                "model": config.MODEL,
-                "contents": prompt,
-                "config": call_config,
-            }
 
-            response = client.models.generate_content(**kwargs)
-            _record_tokens(response)
-            text = (response.text or "").strip()
+def generate_with_tools(contents: list, tools: list, system: str | None = None,
+                        temperature: float = 0.2, model: str | None = None):
+    """
+    One function-calling turn. `contents` is the conversation so far (a list
+    of google.genai Content objects), `tools` a list of FunctionDeclaration.
+    Returns the model's Content (its parts hold function_call or text).
+    Never cached: each turn depends on what the tools returned.
+    """
+    from google.genai import types
 
-            if use_cache:
-                _cache_write(key, text)
-            return text
-
-        except Exception as exc:  # noqa: BLE001 — surfaced below
-            last_error = exc
-            message = str(exc).lower()
-            rate_limited = (
-                "429" in message
-                or "resource" in message and "exhaust" in message
-                or "rate" in message and "limit" in message
-            )
-            if not rate_limited:
-                raise ModelUnavailable(_explain(exc)) from exc
-            backoff = _retry_delay(exc, attempt)
-            print(
-                f"  [rate limit] service pushed back. Waiting {backoff:.0f}s "
-                f"(attempt {attempt + 1} of {config.MAX_RETRIES}). This is "
-                f"the limiter doing its job, not a bug.",
-                file=sys.stderr,
-                flush=True,
-            )
-            time.sleep(backoff)
-
-    raise RuntimeError(
-        f"Still rate limited after {config.MAX_RETRIES} attempts. Wait a "
-        f"minute and try again — your key is fine.\nLast error: {last_error}"
+    model = model or config.MODEL
+    call_config = types.GenerateContentConfig(
+        temperature=temperature,
+        system_instruction=system,
+        tools=[types.Tool(function_declarations=tools)],
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
+    response = _request(model, lambda client: client.models.generate_content(
+        model=model, contents=contents, config=call_config))
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates or not candidates[0].content:
+        return types.Content(role="model", parts=[])
+    return candidates[0].content
+
+
+# ─── Embeddings ──────────────────────────────────────────────────────────────
+# Cached on disk by (model, text) in .cache/embeddings.sqlite, so a listing is
+# embedded once no matter how many searches it shows up in.
+
+import sqlite3
+
+_EMBED_DB = config.CACHE_DIR / "embeddings.sqlite"
+_embed_lock = threading.Lock()
+EMBED_BATCH = 25
+
+
+def _embed_db():
+    config.CACHE_DIR.mkdir(exist_ok=True)
+    db = sqlite3.connect(_EMBED_DB)
+    db.execute("create table if not exists emb (k text primary key, v text)")
+    return db
+
+
+def embed(texts: list[str], task: str = "SEMANTIC_SIMILARITY", patient: bool = True) -> list[list[float]]:
+    """
+    Embedding vectors (config.EMBED_DIM floats each) for `texts`, in order.
+    Raises ModelUnavailable when embeddings are off or the service fails, and
+    RuntimeError when rate limited (at once if patient=False); callers fall
+    back to keyword ranking.
+    """
+    if not config.EMBEDDINGS_ENABLED:
+        raise ModelUnavailable("Embeddings are turned off (FITFINDR_EMBEDDINGS=0).")
+    model = config.EMBED_MODEL
+    keys = [hashlib.sha256(f"{model}|{config.EMBED_DIM}|{task}|{t}".encode("utf-8")).hexdigest()
+            for t in texts]
+    found: dict[str, list[float]] = {}
+    with _embed_lock:
+        db = _embed_db()
+        try:
+            for k in set(keys):
+                row = db.execute("select v from emb where k = ?", (k,)).fetchone()
+                if row:
+                    found[k] = json.loads(row[0])
+        finally:
+            db.close()
+
+    missing = [(k, t) for k, t in dict(zip(keys, texts)).items() if k not in found]
+    from google.genai import types
+    # The API takes ≤ 100 texts per call, but the free tier counts each text against
+    # a per-minute limit, so smaller batches get through where 100 would be refused.
+    for start in range(0, len(missing), EMBED_BATCH):
+        batch = missing[start:start + EMBED_BATCH]
+        response = _request(model, lambda client, b=batch: client.models.embed_content(
+            model=model, contents=[t for _, t in b],
+            config=types.EmbedContentConfig(task_type=task, output_dimensionality=config.EMBED_DIM)),
+            retries=None if patient else 1)
+        vectors = [list(e.values) for e in response.embeddings]
+        with _embed_lock:
+            db = _embed_db()
+            try:
+                for (k, _), v in zip(batch, vectors):
+                    found[k] = v
+                    db.execute("insert or replace into emb values (?, ?)",
+                               (k, json.dumps([round(x, 6) for x in v])))
+                db.commit()
+            finally:
+                db.close()
+    return [found[k] for k in keys]
+
+
+# ─── Images ──────────────────────────────────────────────────────────────────
+
+def generate_image(prompt: str, model: str | None = None) -> tuple[bytes, str]:
+    """
+    One generated image: (bytes, mime type). Raises like generate() when the
+    model can't be reached; never cached here (callers store the result).
+    """
+    from google.genai import types
+
+    model = model or config.IMAGE_MODEL
+    if not model:
+        raise ModelUnavailable("Image generation is turned off (FITFINDR_IMAGE_MODEL is empty).")
+    response = _request(model, lambda client: client.models.generate_content(
+        model=model, contents=prompt,
+        config=types.GenerateContentConfig(response_modalities=["IMAGE"])), retries=1)
+    candidates = getattr(response, "candidates", None) or []
+    parts = candidates[0].content.parts if candidates and candidates[0].content else []
+    for part in parts or []:
+        data = getattr(part, "inline_data", None)
+        if data and data.data:
+            return data.data, data.mime_type or "image/png"
+    raise ModelUnavailable("The image model answered without an image.")

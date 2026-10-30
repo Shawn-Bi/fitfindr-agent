@@ -42,10 +42,10 @@ FitFindr-Agent/        # the project folder, GitHub repo fitfindr-agent (private
 
 1. **The product never shows mock, sample or invented listings.** Every listing a user
    sees comes from a live API call or a cached copy of a real response (≤ 24 h old).
-2. `tests/fixtures/` holds **recorded real responses** for tests, prompt work and UI
-   work. Load them only when `FITFINDR_DATA_MODE=fixtures`. Default in development is
-   `fixtures`. If `APP_ENV=production` and the mode is `fixtures`, the backend must
-   refuse to start.
+2. `tests/fixtures/` holds **recorded real responses** for unit tests, the eval and
+   Playwright. Load them only when `FITFINDR_DATA_MODE=fixtures`. Local development
+   runs `FITFINDR_DATA_MODE=live` with the 24 h cache (run commands in `README.md`).
+   If `APP_ENV=production` and the mode is `fixtures`, the backend must refuse to start.
 3. **Never make a live RapidAPI call without asking the user first** in the chat, and
    say which host and how many calls. Log every live call (host, time, status).
 4. Free quotas are tiny. Track calls per host per calendar month in Supabase table

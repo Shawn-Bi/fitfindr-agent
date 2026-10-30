@@ -1,0 +1,14 @@
+# CLI deploys run from the repo root (Vercel Root Directory = frontend).
+# Upload only the frontend and the legal docs it renders; never .env or backend.
+/*
+!/frontend
+!/docs
+/docs/*
+!/docs/legal
+/frontend/node_modules
+/frontend/.next
+/frontend/.env*
+/frontend/.vercel
+/frontend/e2e-shots
+/frontend/test-results
+/frontend/playwright-report

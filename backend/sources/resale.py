@@ -38,6 +38,8 @@ from sources.normalize import from_resale
 SOURCE = "RESALE_API_HOST"                 # env var holding the RapidAPI host; quota key
 PLATFORMS = ("depop", "poshmark", "mercari", "ebay")
 FIXTURE_PREFIX = "resale"
+ENABLED = True
+PRICE_IN_QUERY = True    # min/max are sent to the API, so they are part of the cache key
 TIMEOUT_SECONDS = 20
 
 
@@ -80,6 +82,12 @@ def parse(raw) -> list[dict]:
     return [listing for listing in listings if listing]
 
 
-def search(query: str, max_price: float | None = None) -> list[dict]:
+def fetch(query: str, max_price: float | None = None, min_price: float | None = None) -> dict:
+    """The one live request a search makes: 60 results across four stores, price-sorted."""
+    return fetch_raw(query, per_page=60, sort="price", order="asc",
+                     max_price=max_price, min_price=min_price)
+
+
+def search(query: str, max_price: float | None = None, min_price: float | None = None) -> list[dict]:
     """Live search across Depop, Poshmark, Mercari and eBay. Returns [] when nothing matches."""
-    return parse(fetch_raw(query, per_page=60, sort="price", order="asc", max_price=max_price))
+    return parse(fetch(query, max_price=max_price, min_price=min_price))
