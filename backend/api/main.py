@@ -342,6 +342,7 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
         "filter_support": catalog.FILTER_SUPPORT,
         "results": [_public_listing(r, saved) for r in results],
         "stores": panel,
+        "store_notices": catalog.store_notices(panel),
         "data_mode": config.DATA_MODE,
         "personalized": bool(closet),
         "signed_in": user is not None,

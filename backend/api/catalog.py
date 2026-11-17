@@ -292,8 +292,33 @@ def store_panel(statuses: list[dict], results: list[dict]) -> list[dict]:
                "count": counts.get(platform, 0)}
         if s.get("resumes"):
             row["resumes"] = s["resumes"]
+        if s["status"] == "skipped":
+            row["reason"] = "stayed out of this search to save the monthly limit"
+        elif s.get("reason"):
+            row["reason"] = s["reason"]
+        for field in ("kind", "attempts", "latency_ms"):   # failure handling: what happened, how long it took
+            if s.get(field) is not None:
+                row[field] = s[field]
         panel.append(row)
     return panel
+
+
+def _join_names(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def store_notices(panel: list[dict]) -> list[str]:
+    """
+    Plain-words sentences for stores that gave no results because of a
+    failure or a pause, one per distinct reason (Depop, Poshmark, Mercari and
+    eBay share one API call, so they usually fail together). Empty when every
+    store worked. Stores that are simply "coming soon" are not failures.
+    """
+    groups: dict[str, list[str]] = {}
+    for row in panel:
+        if row["status"] in ("error", "paused") and row.get("reason"):
+            groups.setdefault(row["reason"], []).append(row["label"])
+    return [f"{_join_names(labels)} {reason}." for reason, labels in groups.items()]
 
 
 # ── Home picks and closet-item matches (no live calls, no model) ─────────────
