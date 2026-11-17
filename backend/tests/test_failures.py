@@ -263,5 +263,50 @@ class NoticeTest(unittest.TestCase):
         self.assertEqual(catalog.store_notices(panel), [])
 
 
+class SearchRouteFailureTest(unittest.TestCase):
+    """POST /search end to end (fixtures, rules planner, model patched out)."""
+
+    OUTFIT = {"text": "Wear it with wide-leg khakis.", "item_ids": []}
+    CARD = {"caption": "Scored this tee!", "verdict": {"verdict": "Worth it", "reasons": ["Cheap"], "retail": None}}
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from api.main import app, search_limiter
+        search_limiter._hits.clear()
+        self.client = TestClient(app)
+        for p in (mock.patch.object(config, "RETRY_BACKOFF_SECONDS", 0.0), mock.patch("observe.save"),
+                  mock.patch("agent.create_fit_card_full", return_value=self.CARD),
+                  mock.patch("agent.suggest_outfit", return_value=self.OUTFIT)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def search(self, spec):
+        with mock.patch.object(config, "FAIL_STORE", spec):
+            r = self.client.post("/search", json={"q": "vintage graphic tee under $30"})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def test_one_store_down_still_returns_the_others_and_says_why(self):
+        body = self.search("etsy:timeout")
+        self.assertTrue(body["results"])
+        self.assertNotIn("etsy", {x["platform"] for x in body["results"]})
+        self.assertEqual(body["store_notices"], ["Etsy took too long to answer."])
+        etsy_row = next(s for s in body["stores"] if s["platform"] == "etsy")
+        self.assertEqual((etsy_row["status"], etsy_row["kind"], etsy_row["reason"]),
+                         ("error", "timeout", "took too long to answer"))
+        self.assertEqual(next(s for s in body["stores"] if s["platform"] == "depop")["status"], "live")
+        self.assertIsNone(body["empty"])
+
+    def test_all_stores_down_says_so_instead_of_no_matches(self):
+        body = self.search("*:403")
+        self.assertEqual(body["results"], [])
+        self.assertEqual(body["empty"]["title"], "We couldn't search any store right now")
+        self.assertEqual(body["empty"]["relax"], [])
+        self.assertEqual(len(body["store_notices"]), 1)     # all five share one reason
+
+    def test_no_failures_means_no_notices(self):
+        self.assertEqual(self.search("")["store_notices"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

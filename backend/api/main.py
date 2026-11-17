@@ -365,6 +365,12 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     if session["clarify"]:   # too vague to search: one question, no results
         return response
     if session["error"]:     # nothing matched even after relaxing: no styling model call was made
+        if live_stores == 0 and response["store_notices"]:   # nothing was searched: not "no matches"
+            response["empty"] = {"title": "We couldn't search any store right now",
+                                 "message": "Every store was unavailable, so there is nothing to show yet. "
+                                            "Nothing was wrong with your search. Try again in a minute.",
+                                 "relax": []}
+            return response
         response["empty"] = {"title": catalog.empty_title(config.DATA_MODE),
                              "message": catalog.empty_message(parsed, live_stores),
                              "relax": catalog.relax_options(parsed)}
