@@ -2,236 +2,236 @@
 
 Oct 18, 2026 · @Shawn Bi
 
-FitFindr 是一个面向美国用户的二手服饰搜索 Agent：用户用一句话或自己的衣橱找到合适的二手单品，并看到如何和已有衣服搭配。本版把注册、首页、我的衣橱三份 PRD 合并为一份，范围收窄到可在一个人几周内做完的 MVP。
+FitFindr is a secondhand-clothing search agent for US users. A user describes what they want in one sentence, or starts from their own closet, finds a suitable secondhand piece, and sees how to wear it with clothes they already own. This version merges the three earlier PRDs (sign-up, home, my closet) into one and narrows the scope to an MVP that one person can finish in a few weeks.
 
-## 1. MVP 范围
+## 1. MVP scope
 
-MVP 只做“买”这一条线：搜索二手单品、管理自己的衣橱、看搭配建议、收藏。卖和社交是另外两个产品，放到后续阶段。
+The MVP covers only the "buy" side: search secondhand items, manage your own closet, see outfit suggestions, and save items. Selling and social features are two separate products and come in later phases.
 
-| 功能 | MVP | 说明 |
+| Feature | MVP | Notes |
 | --- | --- | --- |
-| 邮箱注册、登录、忘记密码 | 做 | 用成熟的登录服务，不自己存密码 |
-| 尺码与风格档案 | 做 | 全部可跳过 |
-| 文字搜索 + 结果页 | 做 | 6 个平台的真实商品（RapidAPI） |
-| 风格卡片筛选 | 做 | Vintage、Y2K、Streetwear 等 |
-| 我的衣橱：上传照片 + 填写衣物信息 | 做 | 增删改查，照片必须支持 |
-| 单品详情 + AI 搭配建议 | 做 | 就是现有的 suggest\_outfit |
-| 收藏 | 做 | 站内收藏 |
-| 每个推荐都显示商品图片 | 做 | 用各平台接口返回的商品图 |
-| 图片搜索（上传参考图找相似款） | 占位 | 显示“Coming soon” |
-| 卖闲置、多平台发布、AI 估价 | 不做 | 大部分平台没有发布接口 |
-| 同城 | 不做 | FB Marketplace 商品先进搜索结果，按城市筛选放第二阶段 |
-| 好友衣橱、关注、消息 | 不做 | 社交功能，第三阶段 |
-| 邮件/短信通知、定时推荐 | 不做 | 第二阶段 |
+| Email sign-up, log-in, forgot password | Yes | Use a proven auth service; never store passwords ourselves |
+| Size and style profile | Yes | Everything can be skipped |
+| Text search + results page | Yes | Real listings from 6 platforms (RapidAPI) |
+| Style-card filters | Yes | Vintage, Y2K, Streetwear, etc. |
+| My closet: upload a photo + fill in item details | Yes | Create, read, update, delete; photos are required |
+| Item detail + AI outfit suggestion | Yes | This is the existing suggest\_outfit |
+| Saved items | Yes | Saved inside the site |
+| Every recommendation shows a listing photo | Yes | Use the photo returned by each platform's API |
+| Image search (upload a reference photo to find similar items) | Placeholder | Shows "Coming soon" |
+| Sell items, cross-post to several platforms, AI pricing | No | Most platforms have no posting API |
+| Local (same city) | No | Facebook Marketplace items appear in search results first; filtering by city is phase 2 |
+| Friends' closets, follows, messages | No | Social features, phase 3 |
+| Email/SMS notifications, scheduled recommendations | No | Phase 2 |
 
-## 2. 页面清单与核心流程
+## 2. Page list and core flow
 
-网站界面统一用英文（目标用户在美国），主题色天蓝色。一套响应式代码同时支持手机和电脑：手机底部导航、单栏；电脑顶部导航、多栏。未登录看 Landing，登录后看 Home。登录后底部导航 4 个入口：Home · Closet · Saved · Profile；桌面端放在顶部。
+The site UI is English only (the target users are in the US) with a sky-blue theme. One responsive codebase supports both phone and desktop: on phones a bottom navigation and one column; on desktop a top navigation and multiple columns. Logged-out visitors see the Landing page; logged-in users see Home. After login the bottom navigation has 4 entries: Home · Closet · Saved · Profile; on desktop they sit in the top bar.
 
-| 编号 | 页面 | 谁能看 | 作用 |
+| ID | Page | Who can see it | Purpose |
 | --- | --- | --- | --- |
-| P1 | Landing | 未登录 | 介绍产品，引导注册或试搜 |
-| P2 | Sign up / Log in | 未登录 | 邮箱 + 密码，条款同意 |
-| P3 | Profile setup | 新用户 | 尺码、风格、预算，全部可跳过 |
-| P4 | Home | 登录后 | 搜索框、风格卡片、为你推荐 |
-| P5 | Search results | 所有人 | 商品卡片 + 搭配建议 + 文案 |
-| P6 | My Closet | 登录后 | 按分类浏览自己的衣服 |
-| P7 | Add item | 登录后 | 上传照片 + 填写衣物信息 |
-| P8 | Closet item detail | 登录后 | 这件衣服 + 可以配它的二手商品 |
-| P9 | Saved | 登录后 | 收藏的商品 |
+| P1 | Landing | Logged out | Introduce the product; lead to sign-up or a trial search |
+| P2 | Sign up / Log in | Logged out | Email + password, terms consent |
+| P3 | Profile setup | New users | Sizes, styles, budget; all skippable |
+| P4 | Home | Logged in | Search box, style cards, picks for you |
+| P5 | Search results | Everyone | Listing cards + outfit suggestion + caption |
+| P6 | My Closet | Logged in | Browse your own clothes by category |
+| P7 | Add item | Logged in | Upload a photo + fill in item details |
+| P8 | Closet item detail | Logged in | This item + secondhand listings that go with it |
+| P9 | Saved | Logged in | Saved listings |
 
-新用户主流程：
+Main flow for a new user:
 
 1. Landing → Get Started
-2. Sign up（邮箱 + 密码 + 同意条款）→ 邮箱验证
-3. Profile setup（可跳过）
-4. My Closet 空状态 → Add your first item → 上传照片 + 填信息 → 保存
-5. Home → 输入 “vintage graphic tee under $30” → Search results
-6. 结果卡片显示用自己衣橱的搭配建议 → 收藏或跳转原平台购买
+2. Sign up (email + password + agree to terms) → email verification
+3. Profile setup (skippable)
+4. My Closet empty state → Add your first item → upload a photo + fill in details → save
+5. Home → type "vintage graphic tee under $30" → Search results
+6. The result card shows an outfit suggestion built from the user's own closet → save it, or jump to the original platform to buy
 
-游客可以在 Landing 试搜；结果页用通用搭配建议，并提示“注册后用你自己的衣橱搭配”。
+Guests can try a search on Landing; the results page then uses a generic outfit suggestion and prompts "Sign up to get outfits from your own closet."
 
-## 3. 逐页需求
+## 3. Requirements by page
 
 ### P1 Landing
 
-- 顶部：FitFindr logo · How it works · Log in · Get started
-- 主标题：Find pieces that fit your wardrobe, not just your search.
-- 副标题：Secondhand finds from supported stores, matched to your style, size and budget.
-- 一个试搜框（示例 vintage graphic tee under $30）+ Get started 按钮
-- 三步说明：Add your closet → Search in plain words → Get matches that go with what you own
-- 数据来源条：Searching eBay · Etsy · Depop · Poshmark · Mercari · FB Marketplace
+- Top bar: FitFindr logo · How it works · Log in · Get started
+- Headline: Find pieces that fit your wardrobe, not just your search.
+- Subtitle: Secondhand finds from supported stores, matched to your style, size and budget.
+- A trial search box (example: vintage graphic tee under $30) + a Get started button
+- Three steps: Add your closet → Search in plain words → Get matches that go with what you own
+- Data-source bar: Searching eBay · Etsy · Depop · Poshmark · Mercari · FB Marketplace
 
 ### P2 Sign up / Log in
 
-- 必填：Email、Password（至少 12 位，可显示/隐藏，支持密码管理器）
-- 必勾：I agree to the Terms of Service and the Privacy Policy（两个链接可点开）
-- 可选，默认关闭：Email me new matches（MVP 只记录选择，暂不发送）
-- 登录页：Email + Password + Forgot password；错误提示说清楚是哪里错
+- Required: Email, Password (at least 12 characters, show/hide, password-manager friendly)
+- Required checkbox: I agree to the Terms of Service and the Privacy Policy (both links open)
+- Optional, off by default: Email me new matches (the MVP only records the choice and sends nothing)
+- Log-in page: Email + Password + Forgot password; error messages say clearly what is wrong
 
-### P3 Profile setup（全部可跳过）
+### P3 Profile setup (everything skippable)
 
-- 常穿尺码：上衣、裤装（腰围/长度）、鞋码（US/EU/UK）
-- 偏好风格（多选卡片）、偏好颜色、单件预算上限
-- 每项一句话说明用途；按钮 Skip for now / Save & continue
-- 不收集身高、体重、三围（MVP 用不到）
+- Usual sizes: tops, bottoms (waist/length), shoes (US/EU/UK)
+- Preferred styles (multi-select cards), preferred colors, per-item budget cap
+- One sentence per field explaining what it is used for; buttons: Skip for now / Save & continue
+- Do not collect height, weight or body measurements (the MVP has no use for them)
 
 ### P4 Home
 
-- 第一排：Logo · 搜索框 · 相机按钮（点开显示 Coming soon）
-- 第二排：风格卡片横向滑动：Vintage · Y2K · Streetwear · Minimalist · Grunge · Cottagecore
-- 第三排：Picked for your closet（按衣橱和偏好推荐）；新用户显示“添加衣服后解锁”，并展示各平台的热门单品
-- 数据来源条：6 个平台名；某平台额度用完时标 Paused
+- Row 1: Logo · search box · camera button (opens Coming soon)
+- Row 2: Style cards in a horizontal scroll: Vintage · Y2K · Streetwear · Minimalist · Grunge · Cottagecore
+- Row 3: Picked for your closet (recommended from the closet and preferences); new users see "Add clothes to unlock" plus popular items from each platform
+- Data-source bar: the 6 platform names; a platform whose quota has run out is marked Paused
 
 ### P5 Search results
 
-- 顶部显示 Agent 理解到的条件标签：graphic tee · under $30 · size M，每个可点 × 删除
-- 商品网格：图片、标题、价格、尺码、成色、平台、收藏心
-- 第一件（最匹配）展开：How to wear it with your closet（显示用到的自己衣服缩略图）+ Fit card 文案（可复制）
-- 搜不到时：说清楚按哪些条件搜了，给出一键放宽按钮（去掉尺码 / 提高预算）
-- 每个商品显示更新时间和 “Price and stock may change on the original site”；可按平台筛选，暂停的平台显示恢复日期
+- Top: the conditions the agent understood, as tags: graphic tee · under $30 · size M, each removable with ×
+- Listing grid: photo, title, price, size, condition, platform, save heart
+- The first (best match) listing is expanded: How to wear it with your closet (with thumbnails of the user's own clothes used) + Fit card caption (copyable)
+- When nothing is found: say which conditions were searched and offer a one-tap relax button (drop the size / raise the budget)
+- Each listing shows its update time and "Price and stock may change on the original site"; filter by platform; paused platforms show their resume date
 
 ### P6 My Closet
 
-- 顶部：单品总数 · 搜索 · + Add item
-- 分类标签：All · Tops · Bottoms · Outerwear · Dresses · Shoes · Accessories，带数量
-- 照片网格；空状态：Your closet starts here + Add your first item
+- Top: total item count · search · + Add item
+- Category tabs: All · Tops · Bottoms · Outerwear · Dresses · Shoes · Accessories, with counts
+- Photo grid; empty state: Your closet starts here + Add your first item
 
 ### P7 Add item
 
-- 先上传照片（拍照或从相册选），可预览、重拍、删除
-- 再填信息（字段见第 4 节）；第二阶段由 AI 根据照片预填，用户确认
-- 按钮：Save to closet
+- Upload the photo first (take a photo or pick from the album); preview, retake and delete are available
+- Then fill in the details (fields in section 4); in phase 2 AI pre-fills them from the photo and the user confirms
+- Button: Save to closet
 
 ### P8 Closet item detail
 
-- 大图 + 衣物信息 + Edit / Delete
-- Finds that go with this：横向商品卡片（图片、价格、平台、一句匹配理由）
+- Large photo + item details + Edit / Delete
+- Finds that go with this: horizontal listing cards (photo, price, platform, a one-line reason for the match)
 
 ### P9 Saved
 
-- 收藏商品网格；商品已下架时变灰并标注 No longer available
+- Grid of saved listings; a listing that has been taken down turns gray and is labeled No longer available
 
-## 4. 衣橱数据与图片上传
+## 4. Closet data and photo upload
 
-照片和衣物信息都是必做功能：信息越全，Agent 的搭配越准。分类和商品数据对齐，删掉了化妆品，补上了外套和连衣裙。
+Photos and item details are both required features: the more complete the information, the better the agent's outfits. Categories are aligned with the listing data: cosmetics were removed, and outerwear and dresses were added.
 
-| 字段 | 必填 | 输入方式 | 例子 |
+| Field | Required | Input | Example |
 | --- | --- | --- | --- |
-| 照片 photo | 是 | 拍照或上传，JPG/PNG/HEIC，≤ 10 MB | — |
-| 名称 name | 是 | 文字 | Baggy straight-leg jeans |
-| 分类 category | 是 | 单选 | tops / bottoms / outerwear / dresses / shoes / accessories |
-| 颜色 colors | 是 | 多选色块 | dark blue, indigo |
-| 风格标签 style\_tags | 否 | 多选卡片 | denim, streetwear, baggy |
-| 尺码 size | 否 | 文字 | W30 L32 |
-| 品牌 brand | 否 | 文字 | Levi's |
-| 季节 season | 否 | 多选 | spring, fall |
-| 备注 notes | 否 | 文字 | High-waisted, sits above the hip |
+| photo | Yes | Take or upload, JPG/PNG/HEIC, ≤ 10 MB | — |
+| name | Yes | Text | Baggy straight-leg jeans |
+| category | Yes | Single choice | tops / bottoms / outerwear / dresses / shoes / accessories |
+| colors | Yes | Multi-select swatches | dark blue, indigo |
+| style\_tags | No | Multi-select cards | denim, streetwear, baggy |
+| size | No | Text | W30 L32 |
+| brand | No | Text | Levi's |
+| season | No | Multi-select | spring, fall |
+| notes | No | Text | High-waisted, sits above the hip |
 
-上传规则：服务器端检查格式和大小、去掉照片里的 GPS 等元数据、压缩到 1600 px、生成缩略图；上传失败要提示原因并可重试。照片和衣橱默认只有自己可见。
+Upload rules: the server checks format and size, strips metadata such as GPS from the photo, compresses it to 1600 px and creates a thumbnail; a failed upload must say why and allow a retry. Photos and the closet are visible only to their owner by default.
 
-## 5. Agent 与数据源
+## 5. Agent and data sources
 
-商品全部来自通过 RapidAPI 接入的美国二手平台真实数据；产品界面里永远不出现模拟数据。
+All listings come from real data on US secondhand platforms reached through RapidAPI; mock data never appears in the product UI.
 
-| 平台 | RapidAPI Host | 免费额度 | 本地熔断线 |
+| Platform | RapidAPI host | Free quota | Local stop line |
 | --- | --- | --- | --- |
-| Depop · Poshmark · Mercari · eBay | fashion-resale-api.p.rapidapi.com | 50 次/月 | 40 |
-| Etsy | etsy-api2.p.rapidapi.com | 50 次/月 | 40 |
-| Facebook Marketplace | facebook-marketplace-api.p.rapidapi.com | 50 次/月（硬上限） | 40 |
+| Depop · Poshmark · Mercari · eBay | fashion-resale-api.p.rapidapi.com | 50 calls/month | 40 |
+| Etsy | etsy-api2.p.rapidapi.com | 50 calls/month | 40 |
+| Facebook Marketplace | facebook-marketplace-api.p.rapidapi.com | 50 calls/month (hard cap) | 40 |
 
-eBay 通过 Fashion Resale API 获取（platforms 参数里加 ebay），不再单独订阅 eBay 接口，也没有单独的 eBay 额度（2026-10-19 实测确认）。
+eBay comes through the Fashion Resale API (add ebay to the platforms parameter). There is no separate eBay subscription and no separate eBay quota (confirmed by testing on 2026-10-19).
 
-- **统一格式**：每个平台一个 adapter，把返回清洗成 FitFindr 标准字典 id、title、price、size、platform、url、image\_url（可选 condition、updated\_at）；search\_listings 负责合并、去重、排序。
-- **调用优先级**：先调 Fashion Resale API（一次覆盖 Depop、Poshmark、Mercari、eBay 4 个平台，按价格排序以混合各平台结果）；Etsy、FB Marketplace 放到最后统一联调。
-- **开发期用录制数据**：每个接口只真实调用 1–2 次，把原始 JSON 存到 tests/fixtures/；单元测试、Prompt 调试、UI 联调都读这些文件。fixtures 只在开发和测试代码里使用，生产环境不加载。
-- **计数与熔断**：每个 host 一个月度计数器（存数据库，每月 1 日清零）。到熔断线后该平台暂停请求：有 24 小时内的真实缓存就用缓存，没有就跳过该平台，并在结果页显示 “eBay results are paused until Nov 1”。不用假数据填补。
-- **额度提醒**：3 个接口合计约 150 次/月，只够开发和小范围演示；有真实用户前要升级付费套餐。
-- **第三方接口**：这些是 RapidAPI 上的第三方接口，不是平台官方 API；遵守 RapidAPI 和提供方的条款，接口可能变动，需要监控失败率。
-- **不改接口形状**：search\_listings 的输入输出保持不变，继续通过 MCP 调用。
-- **用衣橱匹配**：结果排序加入衣橱信息（缺什么品类、常见颜色和风格）；尺码（US）和预算（USD）从档案自动带入，用户可删。
-- **搜索升级**（第二阶段）：把关键词匹配换成向量搜索，并检查结果品类是否和问题一致。
-- **故障提示写给普通用户**：模型不可用时显示 “Styling suggestions are unavailable right now. Your search results still work.”，技术细节只写日志。
-- **成本控制**：同一问题的真实结果缓存 24 小时；每个用户每分钟最多 10 次搜索。
+- **One standard format:** one adapter per platform cleans the response into the FitFindr standard dict id, title, price, size, platform, url, image\_url (optional condition, updated\_at); search\_listings merges, de-duplicates and sorts.
+- **Call priority:** call the Fashion Resale API first (one call covers Depop, Poshmark, Mercari and eBay, sorted by price so the platforms mix); wire up Etsy and FB Marketplace last, in one integration pass.
+- **Recorded data during development:** call each API for real only 1–2 times and save the raw JSON to tests/fixtures/; unit tests, prompt debugging and UI integration all read these files. Fixtures are used only in development and test code and are never loaded in production.
+- **Counting and stop line:** one monthly counter per host (stored in the database, reset on the 1st of each month). At the stop line that platform stops making requests: if a real cache less than 24 hours old exists, use it; otherwise skip the platform and show "eBay results are paused until Nov 1" on the results page. Never fill the gap with fake data.
+- **Quota warning:** the 3 APIs total about 150 calls a month, enough only for development and a small demo; upgrade to a paid plan before there are real users.
+- **Third-party APIs:** these are third-party APIs on RapidAPI, not the platforms' official APIs; follow the terms of RapidAPI and the providers; the APIs may change, so the failure rate needs monitoring.
+- **Do not change the interface shape:** the input and output of search\_listings stay unchanged and it is still called over MCP.
+- **Match against the closet:** result ranking uses closet information (which categories are missing, common colors and styles); size (US) and budget (USD) come from the profile automatically and the user can remove them.
+- **Search upgrade** (phase 2): replace keyword matching with vector search and check that the result category matches the question.
+- **Failure messages are written for ordinary users:** when the model is unavailable, show "Styling suggestions are unavailable right now. Your search results still work."; technical details go only to the logs.
+- **Cost control:** real results for the same question are cached for 24 hours; each user may make at most 10 searches a minute.
 
-## 6. 隐私、合规与诚实展示
+## 6. Privacy, compliance and honest presentation
 
-- 衣橱、照片、档案默认只有自己可见；Profile 里可以删除单件衣物和整个账户。
-- 密码交给登录服务托管，绝不明文保存；API key 只放在服务器环境变量里。
-- 只展示真正接入的 6 个平台，不说“全网搜索”；每件商品标注来源平台并链接回原商品页。
-- 购买在第三方网站完成；本站不收支付信息。价格和库存以原平台为准。
-- 遵守 eBay 和 Etsy 的 API 使用条款（图片展示、缓存时长、来源标注）。
-- 服务条款和隐私政策正式上线前需要法律审核；第二阶段做短信时，需单独同意并支持 STOP 退订。
+- The closet, photos and profile are visible only to their owner by default; single items and the whole account can be deleted from Profile.
+- Passwords are handled by the auth service and never stored in plain text; API keys live only in server environment variables.
+- Show only the 6 platforms that are really connected, and never claim to "search the whole web"; label each listing with its source platform and link back to the original listing page.
+- Purchases are completed on third-party sites; this site collects no payment information. Price and stock are as shown on the original platform.
+- Follow the API terms of eBay and Etsy (image display, cache duration, source attribution).
+- The terms of service and privacy policy need legal review before launch; when SMS is built in phase 2, it needs separate consent and must support STOP opt-out.
 
-## 7. 技术方案建议
+## 7. Suggested technical approach
 
-建议用 Supabase 一次解决数据库、登录和图片存储三件事，后端保留 Python，直接复用现有 Agent 代码。
+Use Supabase to cover the database, login and image storage in one go; keep the backend in Python and reuse the existing agent code directly.
 
-| 层 | 选择 | 理由 |
+| Layer | Choice | Reason |
 | --- | --- | --- |
-| 前端 | Next.js + Tailwind CSS | 模板多，部署简单 |
-| 后端 | FastAPI（Python） | 直接调用现有 run\_agent |
-| 数据库 | Supabase Postgres | 衣橱、收藏、档案用 SQL 存 |
-| 登录 | Supabase Auth | 邮箱验证、忘记密码都现成 |
-| 图片存储 | Supabase Storage | 每个用户只能读写自己的照片 |
-| 部署 | Vercel（前端）+ Render（后端） | 都有免费额度 |
+| Frontend | Next.js + Tailwind CSS | Many templates, simple deployment |
+| Backend | FastAPI (Python) | Calls the existing run\_agent directly |
+| Database | Supabase Postgres | Closet, saved items and profile stored in SQL |
+| Auth | Supabase Auth | Email verification and forgot-password are built in |
+| Image storage | Supabase Storage | Each user can read and write only their own photos |
+| Deploy | Vercel (frontend) + Render (backend) | Both have a free tier |
 
-数据表：users、profiles(user\_id, sizes, styles, colors, budget)、closet\_items(id, user\_id, photo\_url, name, category, colors, style\_tags, size, brand, season, notes)、saved\_items(user\_id, listing\_id, source, saved\_at)。
+Tables: users, profiles(user\_id, sizes, styles, colors, budget), closet\_items(id, user\_id, photo\_url, name, category, colors, style\_tags, size, brand, season, notes), saved\_items(user\_id, listing\_id, source, saved\_at).
 
-接口：POST /search、GET/POST/PATCH/DELETE /closet/items、POST /closet/items/{id}/photo、GET /closet/items/{id}/matches、GET/POST/DELETE /saved、GET/PATCH /profile。
+Endpoints: POST /search, GET/POST/PATCH/DELETE /closet/items, POST /closet/items/{id}/photo, GET /closet/items/{id}/matches, GET/POST/DELETE /saved, GET/PATCH /profile.
 
-网站开一个新的私有仓库 fitfindr-agent（本地 the project folder）：课程仓库是公开仓库的 fork，GitHub 不允许把它改成私有，产品代码不应公开。把 agent.py、tools.py、mcp\_server.py 等复制过去；每次大改后继续跑 run\_eval.py。环境变量：GEMINI\_API\_KEY、RAPIDAPI\_KEY、ETSY\_API\_HOST、RESALE\_API\_HOST、FB\_MARKETPLACE\_HOST、SUPABASE\_URL、SUPABASE\_ANON\_KEY、SUPABASE\_SERVICE\_ROLE\_KEY。
+The website lives in a new private repository fitfindr-agent (local: the project folder). The course repository is a fork of a public repository, and GitHub does not allow changing it to private, and product code should not be public. Copy agent.py, tools.py, mcp\_server.py and the rest over; keep running run\_eval.py after every large change. Environment variables: GEMINI\_API\_KEY, RAPIDAPI\_KEY, ETSY\_API\_HOST, RESALE\_API\_HOST, FB\_MARKETPLACE\_HOST, SUPABASE\_URL, SUPABASE\_ANON\_KEY, SUPABASE\_SERVICE\_ROLE\_KEY.
 
-## 8. 验收标准
+## 8. Acceptance criteria
 
-- [ ] 新用户能用邮箱 + 密码注册、验证邮箱、登录；未勾选条款时无法注册
-- [ ] Profile setup 每一项都能跳过
-- [ ] 能上传一张衣服照片并填写信息；退出重新登录后照片和信息仍在
-- [ ] 超过 10 MB 或不支持的格式会被拒绝，并提示原因
-- [ ] 搜索 “vintage graphic tee under $30” 返回带图片的结果，每件 ≤ $30
-- [ ] 有衣橱时，搭配建议点名衣橱里的至少 1 件衣服（5 次里至少 4 次）
-- [ ] 搜不到时不调用模型，并给出可点的放宽建议
-- [ ] 收藏后出现在 Saved，重新登录后仍在
-- [ ] 所有商品来自 6 个真实平台，带图片和原链接，生产环境不加载 fixtures；未做的功能显示 Coming soon，不是空白页
-- [ ] 手机宽度 375 px 下所有页面没有横向滚动；电脑宽度 1280 px 下为多栏布局
-- [ ] run\_eval.py 的 5 条标准仍然达标（读 fixtures，不消耗额度）；每个平台计数到熔断线后不再发起真实请求
+- [ ] A new user can sign up with email + password, verify the email and log in; sign-up is impossible without ticking the terms
+- [ ] Every step of Profile setup can be skipped
+- [ ] A clothing photo can be uploaded and its details filled in; after logging out and back in the photo and details are still there
+- [ ] A file over 10 MB or in an unsupported format is rejected with the reason
+- [ ] Searching "vintage graphic tee under $30" returns results with photos, each ≤ $30
+- [ ] With a closet, the outfit suggestion names at least 1 item from the closet (at least 4 times out of 5)
+- [ ] When nothing is found, no model call is made and tappable relax suggestions are offered
+- [ ] A saved item appears in Saved and is still there after logging in again
+- [ ] All listings come from the 6 real platforms with photos and original links, and fixtures are not loaded in production; unbuilt features show Coming soon, not a blank page
+- [ ] At phone width 375 px no page scrolls horizontally; at desktop width 1280 px the layout is multi-column
+- [ ] The 5 criteria of run\_eval.py are still met (reads fixtures, uses no quota); once a platform's counter reaches the stop line, no more real requests are made
 
-## 9. 相对 v1 的改动与待确认
+## 9. Changes from v1 and open questions
 
-| v1 的写法 | v2 的决定 | 原因 |
+| v1 wording | v2 decision | Reason |
 | --- | --- | --- |
-| 注册 PRD 和首页 PRD 各有一个首页 | 未登录 Landing，登录后 Home | 两个首页会让开发不知道做哪个 |
-| 页面 A/B 和 A–E 编号重复 | 统一为 P1–P9 | 避免指代混乱 |
-| Feed Finder / FitFindr | 统一为 FitFindr | 品牌名一致 |
-| 导航中文、文案英文 | 界面全部英文 | 用户在美国 |
-| Dashboard 与“我的”两个叫法 | Closet + Profile | 一个概念一个名字 |
-| 底部五入口：首页/同城/卖闲置/消息/我的 | Home/Closet/Saved/Profile | 同城、卖闲置、消息暂时没有接口支持 |
-| 衣橱分类含化妆品、缺外套 | tops/bottoms/outerwear/dresses/shoes/accessories | 和商品数据对齐，化妆品和穿搭无关 |
-| 商品数据无图片 | 标准格式包含 image\_url 和 url | 每个推荐必须有图 |
-| 注册时收集身高、体重、三围 | MVP 不收集 | 用不到，增加隐私风险 |
+| The sign-up PRD and the home PRD each had a home page | Logged-out Landing, logged-in Home | Two home pages leave the developer unsure which to build |
+| Pages numbered A/B and A–E overlapped | Unified as P1–P9 | Avoid confusing references |
+| Feed Finder / FitFindr | Unified as FitFindr | One brand name |
+| Navigation in Chinese, copy in English | UI entirely in English | Users are in the US |
+| Two names, Dashboard and "Mine" | Closet + Profile | One concept, one name |
+| Five bottom entries: Home / Local / Sell / Messages / Mine | Home / Closet / Saved / Profile | Local, selling and messages have no API support yet |
+| Closet categories included cosmetics and lacked outerwear | tops/bottoms/outerwear/dresses/shoes/accessories | Aligned with the listing data; cosmetics are unrelated to outfits |
+| Listing data had no photo | The standard format includes image\_url and url | Every recommendation must have a photo |
+| Sign-up collected height, weight and measurements | The MVP does not collect them | Not needed, and adds privacy risk |
 
-待确认：
+Open questions:
 
-- 已确认：只面向美国用户，尺码用 US 体系，价格用 USD。
-- RapidAPI 免费额度只够开发和演示：有真实用户前选哪个付费套餐？
-- 某个第三方接口停服时，用哪个备用接口？
+- Confirmed: US users only, US sizing, prices in USD.
+- The RapidAPI free quota is only enough for development and demos: which paid plan before there are real users?
+- When a third-party API shuts down, which backup API do we use?
 
-## 10. 开发前准备
+## 10. Pre-development preparation
 
-大部分准备已完成；剩下的交给 Claude Code 按 CLAUDE.md 和启动指令完成，只有 3 件事需要你亲手做。
+Most preparation is done; the rest is left to Claude Code, following CLAUDE.md and the start-up instructions, and only 3 things need you to do by hand.
 
-| 事项 | 状态 | 谁来做 |
+| Item | Status | Who does it |
 | --- | --- | --- |
-| GitHub、Vercel、Render 账号 | 已有 | — |
-| Gemini API key | 已有（沿用作业的） | — |
-| RapidAPI key 和 3 个 host | 已有 | 你填进 .env |
-| 10 张衣服照片（wardrobe photos/） | 已有 | — |
-| Logo 和 favicon | 已有（价签 + FF 图形，logo.svg、favicon.svg） | — |
-| 新建私有仓库 fitfindr-agent 并复制 Agent 代码 | 待做 | Claude Code |
-| 把 PRD、CLAUDE.md、原型 HTML、logo 放进项目文件夹 | 已完成 | Claude（已直接放进 FitFindr-Agent） |
-| .env.example、.gitignore、目录结构、RapidAPI 计数器 | 待做 | Claude Code |
-| 服务条款和隐私政策模板（标注 Draft） | 待做 | Claude Code |
-| 调用 Fashion Resale API 1–2 次并录制 fixtures | 待做 | Claude Code，发请求前先问你 |
-| 安装 Node.js LTS | 待做 | 你（Claude Code 会先检查） |
-| 注册 Supabase 并新建项目 | 待做 | 你（约 5 分钟；建表 SQL 由 Claude Code 写） |
-| 律师审核条款 | 有真实用户后 | 你 |
+| GitHub, Vercel and Render accounts | Have | — |
+| Gemini API key | Have (reused from the course assignment) | — |
+| RapidAPI key and 3 hosts | Have | You put them in .env |
+| 10 clothing photos (wardrobe photos/) | Have | — |
+| Logo and favicon | Have (price tag + FF shape, logo.svg, favicon.svg) | — |
+| Create the private repository fitfindr-agent and copy the agent code | To do | Claude Code |
+| Put the PRD, CLAUDE.md, prototype HTML and logo in the project folder | Done | Claude (placed directly in FitFindr-Agent) |
+| .env.example, .gitignore, folder structure, RapidAPI counter | To do | Claude Code |
+| Terms of service and privacy policy templates (marked Draft) | To do | Claude Code |
+| Call the Fashion Resale API 1–2 times and record fixtures | To do | Claude Code, asking you before sending requests |
+| Install Node.js LTS | To do | You (Claude Code will check first) |
+| Sign up for Supabase and create a project | To do | You (about 5 minutes; Claude Code writes the table-creation SQL) |
+| Lawyer review of the terms | After real users exist | You |

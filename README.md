@@ -203,7 +203,7 @@ Supabase for data. Production runs from branch `v2` (deployed 2026-10-19).
   sold/status field.
 
 The full list is in [BLOCKERS.md](BLOCKERS.md). Scope and decisions:
-[docs/PRD.md](docs/PRD.md) (in Chinese), [docs/DECISIONS.md](docs/DECISIONS.md),
+[docs/PRD.md](docs/PRD.md), [docs/DECISIONS.md](docs/DECISIONS.md),
 [docs/V2_REPORT.md](docs/V2_REPORT.md). Rules for working on the code
 (including AI coding agents): [CLAUDE.md](CLAUDE.md).
 

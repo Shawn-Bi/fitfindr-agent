@@ -68,33 +68,34 @@ production searches, so it is paused until Nov 1 and serves its cache. Etsy
 **0** (8/40). Gemini (ledger for Oct 20): 26 flash-lite (5 debugging, about
 21 eval), 3 `gemini-3-flash-preview` (reproducing the bug), 1 embedding, 0 judge.
 
-### 手动测试清单（中文）
+### Hand-test checklist (after the first deploy)
 
-先按下面"重新部署"的步骤把新版本发到 Render 和 Vercel，然后在
-https://fitfindr-ten.vercel.app 用手机宽度（375 px）和电脑宽度（1280 px）各试一遍，页面都不应该能左右滑动。
+First redeploy the new version to Render and Vercel (see docs/DEPLOY.md), then try
+https://fitfindr-ten.vercel.app at phone width (375 px) and desktop width (1280 px).
+No page should scroll sideways at either width.
 
-**真实搜索**
-- [ ] 首页搜索 **denim jacket**：出现真实商品（有图片、价格、店铺名），点 "View on …" 跳到原店铺页面。
-- [ ] 结果页顶部显示每个店铺的状态：Depop/Poshmark/Mercari/eBay 本月额度用完时显示"已暂停，11 月 1 日恢复"，不会出现假商品。
-- [ ] 最佳匹配下面有穿搭建议和 Fit card（结论、理由、文案、**Copy caption** 按钮）。
+**Real search**
+- [ ] Search **denim jacket** on the home page: real listings appear (photo, price, store name), and "View on ..." opens the original store page.
+- [ ] The top of the results page shows each store's status: when the monthly quota for Depop/Poshmark/Mercari/eBay is used up it says "Paused, resumes Nov 1", and no fake listings appear.
+- [ ] Under the best match there is an outfit suggestion and a Fit card (verdict, reasons, caption, **Copy caption** button).
 
-**即时筛选**
-- [ ] 结果页改价格、尺码、成色、店铺：列表马上变化，不重新加载页面，也不消耗新的 API 调用。
-- [ ] 店铺选 Etsy：只剩 Etsy 商品；清除筛选后恢复全部。
-- [ ] Location 筛选是灰色的，提示"这些店铺不支持"（FB 未接入）。
+**Instant filters**
+- [ ] On the results page, change price, size, condition or store: the list changes at once, without reloading the page or using a new API call.
+- [ ] Choose Etsy as the store: only Etsy listings remain; clearing the filter brings everything back.
+- [ ] The Location filter is grayed out with a note that these stores don't support it (FB is not connected).
 
 **Etsy**
-- [ ] 搜索结果里有 Etsy 商品，价格是美元，链接打开 etsy.com。
-- [ ] Facebook Marketplace 显示 "Coming soon"（还未订阅，接口返回 403）。
+- [ ] Search results include Etsy listings, priced in US dollars, with links that open etsy.com.
+- [ ] Facebook Marketplace shows "Coming soon" (not subscribed yet; the API returns 403).
 
-**衣橱穿搭（带图片）**
-- [ ] 登录后进入 Closet，点任意一件衣服：出现 "Finds that go with this"，有标题、配色、2–3 件其他类别单品，每件要么是真实商品图片（View on …），要么是 "Search this"。
-- [ ] 穿搭拼图里同时有你衣橱的照片和找到的商品图片。
-- [ ] 添加一件新衣服并上传照片：显示"Reading your photo…"，字段自动填好并带 **AI suggested** 标记。
+**Closet outfits (with photos)**
+- [ ] After logging in, open Closet and click any item: "Finds that go with this" shows a title, a palette and 2-3 pieces from other categories; each is either a real listing photo (View on ...) or "Search this".
+- [ ] The outfit collage contains both your closet photo and the photos of the listings found.
+- [ ] Add a new item and upload a photo: "Reading your photo..." appears, and the fields fill in with an **AI suggested** badge.
 
-**个人资料尺码**
-- [ ] Profile 里选 Women / Men：各类别的尺码随之变化（选 Men 时 Dresses 消失）。
-- [ ] 填尺码和预算后保存，刷新页面数值还在；回到首页，筛选里已预填价格和性别。
+**Profile sizes**
+- [ ] In Profile choose Women / Men: the sizes per category change with it (Dresses disappears for Men).
+- [ ] Fill in sizes and a budget and save; refresh the page and the values are still there; back on the home page, the filters are pre-filled with price and gender.
 
 > **Finished the morning after (Oct 19, 09:15–09:55)**, one step at a time.
 > The overnight run had been stopped around 06:15 because the machine ran
