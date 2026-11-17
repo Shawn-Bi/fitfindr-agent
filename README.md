@@ -4,6 +4,8 @@
 
 **Find secondhand pieces that fit your wardrobe, not just your search.**
 
+This repository extends my Unit 4 FitFindr agent (originally built in the course starter repo) into a full web app; it is an extension of that system, not a new project.
+
 FitFindr is a secondhand-clothing search agent for US shoppers. Type what you
 want in plain words ("vintage graphic tee under $30"). FitFindr searches US
 resale stores, picks the best match, explains how to wear it with clothes from
@@ -211,3 +213,36 @@ The full list is in [BLOCKERS.md](BLOCKERS.md). Scope and decisions:
 
 No license yet: all rights reserved. You're welcome to read the code and fork
 it on GitHub. Please ask before reusing it elsewhere.
+
+## Capstone
+
+**What This Extends.** This repo grew from my Unit 4 FitFindr agent: the
+tool-choosing loop (`agent.py`) with `search_listings` served over MCP,
+`suggest_outfit` and `create_fit_card`. Before the capstone it had already
+become the web app described above (Next.js and FastAPI, Supabase accounts,
+closet photos, the AI stylist, six stores through three RapidAPI hosts) and
+already had some failure handling:
+
+- A store that fails inside a search is caught on its own, so one broken store
+  does not crash the search (`sources/__init__.py`). The response marks it
+  `error`, and the UI shows "unavailable" with no reason.
+- A store at its monthly stop line is `paused`, serves its 24-hour cache, and
+  says when it resumes. If the counter can't be read, no live call is made.
+- Each live request has a fixed timeout and is never retried, because a retry
+  costs quota. Failures are written to the server log only as a stack trace.
+- When the model is down, search results still show and the caption is written
+  in code.
+
+What is new in the capstone is the layer between those pieces and the user:
+failures are classified (timeout, 403, 429, quota stop line, malformed JSON,
+other), a timeout or a 429 gets one retry with backoff, every store reports a
+status and a plain-words reason in the API response and the UI, bad data is
+rejected before it can be cached, every failure is logged as structured JSON,
+and `FITFINDR_FAIL_STORE` triggers each failure on purpose so it can be tested
+without spending quota. Details: [docs/FAILURE_HANDLING.md](docs/FAILURE_HANDLING.md).
+
+**The Shape.** Shape B, "Harden against failure". When any store API fails
+(timeout, 403, 429, the quota stop line, or malformed JSON), search still
+returns the other stores' results, shows which store is unavailable and why in
+plain words, and logs the failure. Out of scope: adding new stores, the
+stylist, and any UI redesign.
