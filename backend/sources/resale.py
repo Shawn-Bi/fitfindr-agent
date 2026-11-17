@@ -32,7 +32,7 @@ import urllib.parse
 import urllib.request
 
 import config
-from sources import quota
+from sources import failures, quota
 from sources.normalize import from_resale
 
 SOURCE = "RESALE_API_HOST"                 # env var holding the RapidAPI host; quota key
@@ -40,13 +40,19 @@ PLATFORMS = ("depop", "poshmark", "mercari", "ebay")
 FIXTURE_PREFIX = "resale"
 ENABLED = True
 PRICE_IN_QUERY = True    # min/max are sent to the API, so they are part of the cache key
-TIMEOUT_SECONDS = 20
+
+
+def validate(raw) -> None:
+    """Raise StoreError('malformed') unless raw looks like a Fashion Resale reply (an empty list is fine)."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("listings"), list):
+        raise failures.StoreError("malformed", "Fashion Resale reply has no 'listings' list")
 
 
 def fetch_raw(query: str, per_page: int = 20, page: int = 1, **filters) -> dict:
     """
-    One live request. Checks the stop line first, counts and logs the call
-    whatever the outcome, and never retries (each retry would cost quota).
+    One live request. Checks the stop line first and counts and logs the call whatever the
+    outcome. It never retries itself: sources/failures.call decides that (timeout
+    and 429 only), and each attempt is counted.
     """
     quota.check(SOURCE)
     host = os.getenv(SOURCE, "").strip()
@@ -62,13 +68,13 @@ def fetch_raw(query: str, per_page: int = 20, page: int = 1, **filters) -> dict:
 
     status = "error"
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=config.STORE_TIMEOUT_SECONDS) as response:
             status = response.status
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         status = exc.code
         body = exc.read()[:300].decode("utf-8", "replace")
-        raise RuntimeError(config.redact(f"Fashion Resale API returned HTTP {exc.code}: {body}")) from None
+        raise failures.http_error("Fashion Resale API", exc.code, body) from None
     finally:
         quota.record(SOURCE, status)
 

@@ -165,6 +165,21 @@ BROADEN_LIVE_FETCHES = int(os.getenv("FITFINDR_BROADEN_LIVE_FETCHES", "2"))
 LIVE_SOURCES = {s.strip() for s in os.getenv("FITFINDR_LIVE_SOURCES", "").split(",") if s.strip()}
 
 
+# ─── Store failure handling (sources/failures.py) ────────────────────────────
+# How long one store may take before it counts as failed (the HTTP timeout of
+# each live request), and the retry rule: a timeout or a 429 is retried
+# RETRY_MAX times (once), after RETRY_BACKOFF_SECONDS. Nothing else is retried.
+STORE_TIMEOUT_SECONDS = float(os.getenv("FITFINDR_STORE_TIMEOUT", "20"))
+RETRY_MAX = int(os.getenv("FITFINDR_RETRY_MAX", "1"))
+RETRY_BACKOFF_SECONDS = float(os.getenv("FITFINDR_RETRY_BACKOFF", "1.5"))
+
+# Trigger a store failure on purpose, e.g. "depop:timeout,etsy:429:once". See
+# sources/failures.py. Test only: production refuses to start with it set.
+FAIL_STORE = os.getenv("FITFINDR_FAIL_STORE", "").strip()
+if FAIL_STORE and APP_ENV == "production":
+    raise SystemExit("Refusing to start: FITFINDR_FAIL_STORE is for testing and must be empty in production.")
+
+
 # ─── Rate limiting and quota guards ──────────────────────────────────────────
 # You should not need to touch these.
 #

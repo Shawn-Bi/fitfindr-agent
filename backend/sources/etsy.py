@@ -35,7 +35,7 @@ import urllib.parse
 import urllib.request
 
 import config
-from sources import quota
+from sources import failures, quota
 from sources.normalize import from_etsy
 
 SOURCE = "ETSY_API_HOST"                 # env var holding the RapidAPI host; quota key
@@ -43,7 +43,12 @@ PLATFORMS = ("etsy",)
 FIXTURE_PREFIX = "etsy"
 ENABLED = True
 PRICE_IN_QUERY = False   # the cache key ignores the price range: one response serves every budget
-TIMEOUT_SECONDS = 60     # the API documents 2–5 s, sometimes more
+
+
+def validate(raw) -> None:
+    """Raise StoreError('malformed') unless raw looks like an Etsy API reply."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("data"), dict):
+        raise failures.StoreError("malformed", "Etsy reply has no 'data' object")
 
 
 def etsy_query(query: str) -> str:
@@ -53,8 +58,9 @@ def etsy_query(query: str) -> str:
 
 def fetch(query: str, max_price: float | None = None, min_price: float | None = None) -> dict:
     """
-    One live request. Checks the stop line first, counts and logs the call
-    whatever the outcome, and never retries (each retry would cost quota).
+    One live request. Checks the stop line first and counts and logs the call whatever the
+    outcome. It never retries itself: sources/failures.call decides that (timeout
+    and 429 only), and each attempt is counted.
     The price range is applied after the call, not sent.
     """
     quota.check(SOURCE)
@@ -69,18 +75,18 @@ def fetch(query: str, max_price: float | None = None, min_price: float | None = 
 
     status = "error"
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=config.STORE_TIMEOUT_SECONDS) as response:
             status = response.status
             raw = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         status = exc.code
         body = exc.read()[:300].decode("utf-8", "replace")
-        raise RuntimeError(config.redact(f"Etsy API returned HTTP {exc.code}: {body}")) from None
+        raise failures.http_error("Etsy API", exc.code, body) from None
     finally:
         quota.record(SOURCE, status)
     if not isinstance(raw, dict) or not raw.get("success"):
         error = (raw or {}).get("error") if isinstance(raw, dict) else None
-        raise RuntimeError(config.redact(f"Etsy API error: {json.dumps(error)[:300]}"))
+        raise failures.StoreError("malformed", f"Etsy API error: {json.dumps(error)[:300]}")
     # The response has no fetch time; keep ours so updated_at can say how fresh it is.
     raw["fetched_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     return raw
