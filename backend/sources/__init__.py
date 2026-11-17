@@ -53,10 +53,10 @@ def _failed_statuses(adapter, error: failures.StoreError, attempts: int, latency
     if error.kind == "quota_paused":
         extra = {"resumes": error.resumes} if error.resumes else {}
         return _statuses(adapter, "paused", kind=error.kind, reason=failures.plain_reason(error.kind, error.resumes),
-                         attempts=attempts, latency_ms=latency_ms, **extra)
+                         attempts=attempts, latency_ms=latency_ms, source=adapter.SOURCE, **extra)
     return _statuses(adapter, "error", kind=error.kind, reason=failures.plain_reason(error.kind),
                      error=error.detail, http_status=error.http_status,
-                     attempts=attempts, latency_ms=latency_ms)
+                     attempts=attempts, latency_ms=latency_ms, source=adapter.SOURCE)
 
 
 def _live_fetch(adapter, query, max_price, min_price):
@@ -122,7 +122,8 @@ def fetch_candidates(query: str, max_price: float | None = None,
             marks = quota.statuses(adapter.SOURCE, adapter.PLATFORMS)
         except Exception:  # noqa: BLE001 — the search worked; a counter hiccup must not hide its results
             marks = _statuses(adapter, "active")
-        statuses += [{**m, "attempts": done["attempts"], "latency_ms": done["latency_ms"]} for m in marks]
+        statuses += [{**m, "attempts": done["attempts"], "latency_ms": done["latency_ms"], "source": adapter.SOURCE}
+                     for m in marks]
     return listings, statuses
 
 

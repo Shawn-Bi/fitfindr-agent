@@ -173,6 +173,13 @@ STORE_TIMEOUT_SECONDS = float(os.getenv("FITFINDR_STORE_TIMEOUT", "20"))
 RETRY_MAX = int(os.getenv("FITFINDR_RETRY_MAX", "1"))
 RETRY_BACKOFF_SECONDS = float(os.getenv("FITFINDR_RETRY_BACKOFF", "1.5"))
 
+# One JSON record per search (searchlog.py): a line in this file, and a row in
+# the Supabase `traces` table. SEARCH_LOG_DB=0 keeps it to the file (the
+# benchmark script uses that so it never writes to the database).
+LOG_DIR = ROOT / "logs"
+SEARCH_LOG_PATH = Path(os.getenv("FITFINDR_SEARCH_LOG", "").strip() or LOG_DIR / "searches.jsonl")
+SEARCH_LOG_DB = os.getenv("FITFINDR_SEARCH_LOG_DB", "1") != "0"
+
 # Trigger a store failure on purpose, e.g. "depop:timeout,etsy:429:once". See
 # sources/failures.py. Test only: production refuses to start with it set.
 FAIL_STORE = os.getenv("FITFINDR_FAIL_STORE", "").strip()

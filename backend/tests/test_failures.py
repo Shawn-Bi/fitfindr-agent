@@ -13,11 +13,16 @@ import unittest
 import urllib.error
 from unittest import mock
 
-import config
-import sources
-from api import catalog
-from sources import etsy, failures, quota, resale
-from sources.failures import StoreError
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
+os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
+os.environ["FITFINDR_EMBEDDINGS"] = "0"         # no network: keyword ranking
+os.environ["FITFINDR_PLANNER"] = "rules"        # no network: the deterministic agent policy
+
+import config  # noqa: E402
+import sources  # noqa: E402
+from api import catalog  # noqa: E402
+from sources import etsy, failures, quota, resale  # noqa: E402
+from sources.failures import StoreError  # noqa: E402
 
 
 class FakeAdapter:
@@ -306,6 +311,94 @@ class SearchRouteFailureTest(unittest.TestCase):
 
     def test_no_failures_means_no_notices(self):
         self.assertEqual(self.search("")["store_notices"], [])
+
+
+class SearchRecordTest(unittest.TestCase):
+    """Every search leaves one JSON record in the log file, failed ones included."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from fastapi.testclient import TestClient
+        from api.main import app, search_limiter
+        search_limiter._hits.clear()
+        self.client = TestClient(app, raise_server_exceptions=False)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "searches.jsonl"
+        self.addCleanup(self.tmp.cleanup)
+        for p in (mock.patch.object(config, "SEARCH_LOG_PATH", self.path), mock.patch.object(config, "SEARCH_LOG_DB", False),
+                  mock.patch.object(config, "RETRY_BACKOFF_SECONDS", 0.0), mock.patch.object(config, "FAIL_STORE", ""),
+                  mock.patch("agent.create_fit_card_full", return_value=SearchRouteFailureTest.CARD),
+                  mock.patch("agent.suggest_outfit", return_value=SearchRouteFailureTest.OUTFIT)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def records(self):
+        return [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines()]
+
+    def test_a_good_search_writes_one_complete_record(self):
+        r = self.client.post("/search", json={"q": "vintage graphic tee under $30", "max_price": 30})
+        self.assertEqual(r.status_code, 200)
+        (rec,) = self.records()
+        for field in ("ts", "run_id", "query", "filters", "stores_called", "stores", "result_count",
+                      "total_latency_ms", "tokens", "cost_usd", "outcome", "live_calls"):
+            self.assertIn(field, rec)
+        self.assertEqual(rec["query"], "vintage graphic tee under $30")
+        self.assertEqual(rec["filters"]["max_price"], 30)
+        self.assertEqual(rec["result_count"], len(r.json()["results"]))
+        self.assertGreater(rec["total_latency_ms"], 0)
+        self.assertIn("depop", rec["stores_called"])
+        self.assertFalse(rec["partial"])
+        self.assertEqual(rec["live_calls"], 0)                      # fixtures: no RapidAPI request
+        depop = next(s for s in rec["stores"] if s["platform"] == "depop")
+        self.assertEqual((depop["status"], depop["attempts"]), ("fixtures", 1))
+        self.assertIn("latency_ms", depop)
+
+    def test_a_partial_search_records_which_store_failed_and_why(self):
+        with mock.patch.object(config, "FAIL_STORE", "etsy:403"):
+            self.client.post("/search", json={"q": "vintage graphic tee"})
+        (rec,) = self.records()
+        self.assertTrue(rec["partial"])
+        self.assertEqual(rec["failed_stores"], ["etsy"])
+        etsy_row = next(s for s in rec["stores"] if s["platform"] == "etsy")
+        self.assertEqual((etsy_row["status"], etsy_row["kind"], etsy_row["http_status"]), ("error", "forbidden", 403))
+        self.assertGreater(rec["result_count"], 0)
+
+    def test_all_stores_down_is_recorded_as_its_own_outcome(self):
+        with mock.patch.object(config, "FAIL_STORE", "*:timeout"):
+            self.client.post("/search", json={"q": "vintage graphic tee"})
+        (rec,) = self.records()
+        self.assertEqual((rec["outcome"], rec["result_count"]), ("all_stores_down", 0))
+
+    def test_a_crashing_search_is_still_logged(self):
+        with mock.patch("api.main.run_agent", side_effect=RuntimeError("boom")):
+            r = self.client.post("/search", json={"q": "vintage graphic tee"})
+        self.assertEqual(r.status_code, 500)
+        (rec,) = self.records()
+        self.assertEqual(rec["outcome"], "error")
+        self.assertIn("boom", rec["error"])
+
+    def test_a_refused_search_is_logged_too(self):
+        r = self.client.post("/search", json={"q": "   ,  "})
+        self.assertEqual(r.status_code, 422)
+        (rec,) = self.records()
+        self.assertEqual(rec["outcome"], "rejected")
+
+    def test_the_record_holds_no_key_and_no_user_id(self):
+        with mock.patch.dict("os.environ", {"RAPIDAPI_KEY": "not-a-real-key-123456"}),              mock.patch.object(config, "FAIL_STORE", "etsy:403"):
+            self.client.post("/search", json={"q": "vintage graphic tee"})
+        text = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("not-a-real-key-123456", text)
+        self.assertNotIn("user_id", text)
+
+    def test_live_calls_counts_one_per_host_and_counts_retries(self):
+        import searchlog
+        statuses = [{"platform": p, "status": "error", "kind": "timeout", "attempts": 2, "source": "RESALE_API_HOST"}
+                    for p in ("depop", "ebay")]
+        statuses += [{"platform": "etsy", "status": "active", "attempts": 1, "source": "ETSY_API_HOST"},
+                     {"platform": "x", "status": "cached"}]
+        with mock.patch.object(config, "DATA_MODE", "live"):
+            self.assertEqual(searchlog.build("q", {}, statuses=statuses)["live_calls"], 3)
 
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ import attributes
 import autotag
 import config
 import observe
+import searchlog
 import previews
 import stylist
 import supa
@@ -262,6 +263,38 @@ def _client_key(request: Request, user: User | None) -> str:
 
 @app.post("/search")
 def search(body: SearchIn, request: Request, user: User | None = Depends(optional_user)):
+    """Run a search and write exactly one structured record about it, even if it fails (searchlog.py)."""
+    started = time.perf_counter()
+    ctx: dict = {}
+    filters = body.model_dump(exclude={"q", "style", "use_profile"})
+
+    def log_run(outcome: str, response: dict | None = None, error: str | None = None):
+        session = ctx.get("session") or {}
+        searchlog.write(searchlog.build(
+            body.q, filters, statuses=ctx.get("statuses"), results=ctx.get("results"),
+            total_latency_ms=round((time.perf_counter() - started) * 1000), usage=session.get("usage"),
+            outcome=outcome, error=error, signed_in=user is not None),
+            session=session, user_id=user.id if user else None)
+
+    try:
+        response = _search(body, request, user, ctx)
+    except HTTPException as exc:
+        log_run("rejected", error=f"HTTP {exc.status_code}: {exc.detail}")
+        raise
+    except Exception as exc:  # noqa: BLE001 — logged, then the normal 500 handling applies
+        log_run("error", error=f"{type(exc).__name__}: {exc}")
+        raise
+    session = ctx.get("session") or {}
+    if response.get("empty"):
+        down = response.get("store_notices") and not any(s["status"] == "live" for s in response["stores"])
+        outcome = "all_stores_down" if down else "empty"
+    else:
+        outcome = observe.outcome(session) if session else "completed"
+    log_run(outcome)
+    return response
+
+
+def _search(body: SearchIn, request: Request, user: User | None, ctx: dict):
     quick = not body.style and not is_vague(body.q)
     allowed, retry = (quick_limiter if quick else search_limiter).allow(_client_key(request, user))
     if not allowed:
@@ -297,6 +330,7 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
         else:
             results, statuses = search_with_status(description, None, max_price, **args)
         found.update(results=results, statuses=found.get("statuses") or statuses)
+        ctx["statuses"], ctx["results"] = found["statuses"], results   # kept for the search record even if a later step fails
         return results
 
     if quick:   # a filter changed: results only; the page asks /search/style for the styling
@@ -307,7 +341,7 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
                    "planner": "none", "steps": [], "parsed": parsed}
     else:
         session = run_agent(body.q, wardrobe, parsed=parsed, search=direct_search, prefs=prefs)
-        observe.save_trace("search", body.q, user.id if user else None, session)
+    ctx["session"] = session
     parsed = {**parsed, **{k: session["parsed"].get(k) for k in ("size", "max_price")}}
     if session["relaxed"]:
         chips = _relaxed_chips(chips, parsed, session["relaxed"])
@@ -325,6 +359,7 @@ def search(body: SearchIn, request: Request, user: User | None = Depends(optiona
     if chosen and chosen in results:   # the styled item is the best match shown
         results.remove(chosen)
         results.insert(0, chosen)
+    ctx["statuses"], ctx["results"] = found.get("statuses", []), results
     panel = catalog.store_panel(found.get("statuses", []), results)
     live_stores = sum(1 for s in panel if s["status"] == "live")
     saved = _saved_keys(user)

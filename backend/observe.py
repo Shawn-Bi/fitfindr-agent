@@ -62,6 +62,13 @@ def _insert(data: dict) -> None:
     try:
         supa.service().insert("traces", data)
     except Exception as exc:  # noqa: BLE001 — observability must never break the product
+        if "record" in data:   # migration 0006 (the `record` column) may not be applied yet: save the row without it
+            try:
+                supa.service().insert("traces", {k: v for k, v in data.items() if k != "record"})
+                log.warning("trace saved without its record (apply migration 0006): %s", config.redact(exc))
+                return
+            except Exception as exc2:  # noqa: BLE001
+                exc = exc2
         log.warning("trace not saved: %s", config.redact(exc))
 
 
