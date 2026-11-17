@@ -193,6 +193,7 @@ with no keys.
 
 ## Deploy
 
+[RUNNING.md](RUNNING.md): the live URLs, how to run it, logs and the benchmark.
 [docs/DEPLOY.md](docs/DEPLOY.md): Render for the API, Vercel for the app,
 Supabase for data. Production runs from branch `v2` (deployed 2026-10-19).
 
