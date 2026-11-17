@@ -8,7 +8,7 @@ import type { StoreStatus } from "@/lib/types";
 function note(s: StoreStatus): string | null {
   if (s.status === "paused") return s.resumes ? `paused until ${shortDate(s.resumes)}` : "paused";
   if (s.status === "coming_soon") return "coming soon";
-  if (s.status === "error") return "unavailable";
+  if (s.status === "error") return s.reason || "unavailable";
   return null;
 }
 

@@ -22,6 +22,11 @@ export interface StoreStatus {
   status: "live" | "paused" | "coming_soon" | "error";
   count: number;
   resumes?: string;
+  /** Why the store gave no results, in plain words ("took too long to answer"). */
+  reason?: string;
+  kind?: string;
+  attempts?: number;
+  latency_ms?: number;
 }
 
 export interface Chip {
@@ -85,6 +90,8 @@ export interface SearchResponse {
   chips: Chip[];
   results: Listing[];
   stores: StoreStatus[];
+  /** One plain sentence per store problem, e.g. "Etsy took too long to answer." Empty when all is well. */
+  store_notices?: string[];
   data_mode: "fixtures" | "live";
   personalized: boolean;
   signed_in: boolean;

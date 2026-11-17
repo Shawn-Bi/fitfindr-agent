@@ -430,6 +430,25 @@ function Results() {
                 aria-busy={busy}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-4 md:px-0">
+                  {!!data.store_notices?.length && (
+                    <div role="status" className="flex items-start gap-2 rounded-xl border border-dashed border-muted bg-surface p-3 text-sm">
+                      <span aria-hidden="true" className="font-bold text-primary-hover">
+                        !
+                      </span>
+                      <div>
+                        <p className="m-0 font-bold">
+                          {data.results.length > 0
+                            ? "Some stores couldn't be searched, so these results come from the others."
+                            : "Some stores couldn't be searched."}
+                        </p>
+                        <ul className="m-0 list-none p-0 text-muted">
+                          {data.store_notices.map((n) => (
+                            <li key={n}>{n}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                   {data.broadened && !data.empty && (
                     <div role="status" className="flex items-start gap-2 rounded-xl bg-tint p-3 text-sm">
                       <span aria-hidden="true" className="font-bold text-primary-hover">
