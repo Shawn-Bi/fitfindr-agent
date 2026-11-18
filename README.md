@@ -433,4 +433,6 @@ criteria 3 and 5 as described above.
 
 **How I Used AI.**
 
-TODO: I will write this section myself.
+**Moment 1 — writing my criteria.** I asked Claude to write my five acceptance criteria for me. It refused to write them, because the brief says criteria must be my own, and instead gave me sentence frames with blanks for the numbers and reasons. My first draft said "at least 1 of 10 searches" and "under 1 second". Claude pointed out that 1 of 10 could almost never fail, and that 1 second was impossible because a timeout plus one retry alone takes longer. I changed the targets to 9 of 10 and 3 seconds, and rewrote each reason to say what goes wrong for a user if the target is missed.
+
+**Moment 2 — choosing the repo.** I asked whether I could use my FitFindr web app for the capstone. Claude warned that the brief requires the same repo and no new projects, and suggested the course starter repo instead. I decided to keep this repo, because it grew directly from my Unit 4 agent, and I added a line near the top of the README explaining that it is an extension of that system rather than a new project.
