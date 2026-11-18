@@ -1,0 +1,104 @@
+{
+ "trial1": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "0/10",
+  "c3_met": false,
+  "latency_ms": {
+   "mean": 7990,
+   "median": 7165,
+   "max": 16748,
+   "min": 5265,
+   "all": [
+    16748,
+    7036,
+    7884,
+    6325,
+    6672,
+    8471,
+    7630,
+    7294,
+    6575,
+    5265
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000418,
+  "c5_met": true,
+  "mean_tokens": 3312,
+  "mean_model_calls": 5,
+  "live_calls": 0
+ },
+ "trial2": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "0/10",
+  "c3_met": false,
+  "latency_ms": {
+   "mean": 6405,
+   "median": 6281,
+   "max": 7478,
+   "min": 5842,
+   "all": [
+    6296,
+    6599,
+    5854,
+    6266,
+    6147,
+    6230,
+    6328,
+    7478,
+    7006,
+    5842
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000423,
+  "c5_met": true,
+  "mean_tokens": 3326,
+  "mean_model_calls": 5,
+  "live_calls": 0
+ },
+ "trial3": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "0/10",
+  "c3_met": false,
+  "latency_ms": {
+   "mean": 6127,
+   "median": 6016,
+   "max": 7137,
+   "min": 5501,
+   "all": [
+    5838,
+    6576,
+    5580,
+    6058,
+    7137,
+    5501,
+    6568,
+    6242,
+    5797,
+    5973
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000423,
+  "c5_met": true,
+  "mean_tokens": 3330,
+  "mean_model_calls": 5,
+  "live_calls": 0
+ }
+}

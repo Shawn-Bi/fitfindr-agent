@@ -1,0 +1,182 @@
+INFO:     Started server process [33252]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54073 - "GET /health HTTP/1.1" 200 OK
+[1] parse_query
+      in:  vintage graphic tee
+      out: dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+2026-11-17 23:56:19,446 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:56:20,047 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?select=response_json%2Cfetched_at&query_hash=eq.9a8a97e96a8d250f75a00b727aca8fe8e427477f&platform=eq.resale&fetched_at=gte.2026-11-17T04%3A56%3A19%2B00%3A00 "HTTP/1.1 200 OK"
+2026-11-17 23:56:20,591 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:56:25,498 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/rpc/increment_api_usage "HTTP/1.1 200 OK"
+2026-11-17 23:56:25,499 WARNING fitfindr.live_calls live call host=fashion-resale-api.p.rapidapi.com time=2026-11-18T04:56:24+00:00 status=200 count=1/40
+2026-11-17 23:56:26,081 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?on_conflict=query_hash%2Cplatform "HTTP/1.1 201 Created"
+2026-11-17 23:56:26,647 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:56:26,647 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 1, "will_retry": true, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:56:28,148 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 2, "will_retry": false, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:56:28,582 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:56:29,104 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+[2] search_listings
+      in:  dict with keys: description
+      out: dict with keys: count, top
+      →    gemini
+2026-11-17 23:56:29,785 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:56:29,798 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:57:46,130 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[3] suggest_outfit
+      in:  dict with keys: listing_index
+      out: dict with keys: styled, outfit
+      →    gemini
+2026-11-17 23:57:46,646 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:57:46,654 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:57:47,750 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[4] create_fit_card
+      in:  dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+      out: dict with keys: caption, written_by, verdict
+      →    gemini
+2026-11-17 23:57:47,761 INFO fitfindr.searchlog search {"ts": "2026-11-18T04:57:47.760+00:00", "run_id": "9e787def5d7b", "query": "vintage graphic tee", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 94298, "partial": true, "failed_stores": ["etsy"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 1, "stores": [{"platform": "depop", "status": "active", "results": 7, "attempts": 1, "latency_ms": 5453}, {"platform": "poshmark", "status": "active", "results": 1, "attempts": 1, "latency_ms": 5453}, {"platform": "mercari", "status": "active", "results": 0, "attempts": 1, "latency_ms": 5453}, {"platform": "ebay", "status": "active", "results": 12, "attempts": 1, "latency_ms": 5453}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3015, "output": 256, "model_calls": 7}, "cost_usd": 0.000404}
+INFO:     127.0.0.1:54076 - "POST /search HTTP/1.1" 200 OK
+[5] parse_query
+      in:  denim jacket
+      out: dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+2026-11-17 23:57:48,351 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:57:48,672 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/traces "HTTP/1.1 201 Created"
+2026-11-17 23:57:48,802 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?select=response_json%2Cfetched_at&query_hash=eq.89357bf3a82e18ffb9a32e494dcab17069bfe8a7&platform=eq.resale&fetched_at=gte.2026-11-17T04%3A57%3A48%2B00%3A00 "HTTP/1.1 200 OK"
+2026-11-17 23:57:49,339 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:57:52,083 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/rpc/increment_api_usage "HTTP/1.1 200 OK"
+2026-11-17 23:57:52,083 WARNING fitfindr.live_calls live call host=fashion-resale-api.p.rapidapi.com time=2026-11-18T04:57:51+00:00 status=200 count=2/40
+2026-11-17 23:57:52,461 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?on_conflict=query_hash%2Cplatform "HTTP/1.1 201 Created"
+2026-11-17 23:57:52,856 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:57:52,856 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 1, "will_retry": true, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:57:54,357 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 2, "will_retry": false, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:57:54,942 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:57:55,339 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+[6] search_listings
+      in:  dict with keys: description
+      out: dict with keys: count, top
+      →    gemini
+2026-11-17 23:57:56,750 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:57:56,758 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:57:57,457 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[7] suggest_outfit
+      in:  dict with keys: listing_index
+      out: dict with keys: styled, outfit
+      →    gemini
+2026-11-17 23:57:58,047 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:57:58,055 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:57:58,880 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[8] create_fit_card
+      in:  dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+      out: dict with keys: caption, written_by, verdict
+      →    gemini
+2026-11-17 23:57:58,889 INFO fitfindr.searchlog search {"ts": "2026-11-18T04:57:58.889+00:00", "run_id": "f6d6b0622e0e", "query": "denim jacket", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 11099, "partial": true, "failed_stores": ["etsy"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 1, "stores": [{"platform": "depop", "status": "active", "results": 2, "attempts": 1, "latency_ms": 3281}, {"platform": "poshmark", "status": "active", "results": 0, "attempts": 1, "latency_ms": 3281}, {"platform": "mercari", "status": "active", "results": 0, "attempts": 1, "latency_ms": 3281}, {"platform": "ebay", "status": "active", "results": 18, "attempts": 1, "latency_ms": 3281}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 2994, "output": 286, "model_calls": 7}, "cost_usd": 0.000414}
+INFO:     127.0.0.1:65421 - "POST /search HTTP/1.1" 200 OK
+[9] parse_query
+      in:  flannel shirt
+      out: dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+2026-11-17 23:57:59,245 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/traces "HTTP/1.1 201 Created"
+2026-11-17 23:57:59,453 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:57:59,858 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?select=response_json%2Cfetched_at&query_hash=eq.518e5d755c13b3208a66b97666868ec380a4c56a&platform=eq.resale&fetched_at=gte.2026-11-17T04%3A57%3A59%2B00%3A00 "HTTP/1.1 200 OK"
+2026-11-17 23:58:00,233 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:58:03,394 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/rpc/increment_api_usage "HTTP/1.1 200 OK"
+2026-11-17 23:58:03,395 WARNING fitfindr.live_calls live call host=fashion-resale-api.p.rapidapi.com time=2026-11-18T04:58:03+00:00 status=200 count=3/40
+2026-11-17 23:58:04,119 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?on_conflict=query_hash%2Cplatform "HTTP/1.1 201 Created"
+2026-11-17 23:58:04,471 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:58:04,472 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 1, "will_retry": true, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:58:05,973 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 2, "will_retry": false, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:58:06,470 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:58:06,885 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+[10] search_listings
+      in:  dict with keys: description
+      out: dict with keys: count, top
+      →    gemini
+2026-11-17 23:58:07,937 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:58:07,978 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:58:08,946 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[11] suggest_outfit
+      in:  dict with keys: listing_index
+      out: dict with keys: styled, outfit
+      →    gemini
+2026-11-17 23:58:09,892 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+  [rate limit] 15 requests used this minute. Waiting 36s. This is normal.
+2026-11-17 23:58:46,252 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:58:47,538 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[12] create_fit_card
+      in:  dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+      out: dict with keys: caption, written_by, verdict
+      →    gemini
+2026-11-17 23:58:47,548 INFO fitfindr.searchlog search {"ts": "2026-11-18T04:58:47.547+00:00", "run_id": "9a39389ad9d8", "query": "flannel shirt", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 48653, "partial": true, "failed_stores": ["etsy"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 1, "stores": [{"platform": "depop", "status": "active", "results": 10, "attempts": 1, "latency_ms": 3532}, {"platform": "poshmark", "status": "active", "results": 0, "attempts": 1, "latency_ms": 3532}, {"platform": "mercari", "status": "active", "results": 0, "attempts": 1, "latency_ms": 3532}, {"platform": "ebay", "status": "active", "results": 10, "attempts": 1, "latency_ms": 3532}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3110, "output": 340, "model_calls": 7}, "cost_usd": 0.000447}
+INFO:     127.0.0.1:63413 - "POST /search HTTP/1.1" 200 OK
+[13] parse_query
+      in:  corduroy pants
+      out: dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+2026-11-17 23:58:48,020 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/traces "HTTP/1.1 201 Created"
+2026-11-17 23:58:48,052 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:58:48,577 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?select=response_json%2Cfetched_at&query_hash=eq.31fef9f6e0c8df2ba1556970b7d2900fcb350f90&platform=eq.resale&fetched_at=gte.2026-11-17T04%3A58%3A48%2B00%3A00 "HTTP/1.1 200 OK"
+2026-11-17 23:58:48,989 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:58:52,926 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/rpc/increment_api_usage "HTTP/1.1 200 OK"
+2026-11-17 23:58:52,927 WARNING fitfindr.live_calls live call host=fashion-resale-api.p.rapidapi.com time=2026-11-18T04:58:52+00:00 status=200 count=4/40
+2026-11-17 23:58:53,434 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?on_conflict=query_hash%2Cplatform "HTTP/1.1 201 Created"
+2026-11-17 23:58:53,836 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:58:53,837 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 1, "will_retry": true, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:58:55,337 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 2, "will_retry": false, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:58:55,729 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:58:56,119 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+[14] search_listings
+      in:  dict with keys: description
+      out: dict with keys: count, top
+      →    gemini
+2026-11-17 23:58:56,897 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:58:56,906 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:58:57,680 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[15] suggest_outfit
+      in:  dict with keys: listing_index
+      out: dict with keys: styled, outfit
+      →    gemini
+2026-11-17 23:58:59,144 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:58:59,151 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:59:00,144 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[16] create_fit_card
+      in:  dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+      out: dict with keys: caption, written_by, verdict
+      →    gemini
+2026-11-17 23:59:00,185 INFO fitfindr.searchlog search {"ts": "2026-11-18T04:59:00.185+00:00", "run_id": "7868dfd2f4dd", "query": "corduroy pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 12632, "partial": true, "failed_stores": ["etsy"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 1, "stores": [{"platform": "depop", "status": "active", "results": 2, "attempts": 1, "latency_ms": 4344}, {"platform": "poshmark", "status": "active", "results": 0, "attempts": 1, "latency_ms": 4344}, {"platform": "mercari", "status": "active", "results": 0, "attempts": 1, "latency_ms": 4344}, {"platform": "ebay", "status": "active", "results": 18, "attempts": 1, "latency_ms": 4344}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3126, "output": 334, "model_calls": 7}, "cost_usd": 0.000446}
+INFO:     127.0.0.1:51642 - "POST /search HTTP/1.1" 200 OK
+[17] parse_query
+      in:  white denim pants
+      out: dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+2026-11-17 23:59:00,629 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/traces "HTTP/1.1 201 Created"
+2026-11-17 23:59:01,536 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:59:01,885 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?select=response_json%2Cfetched_at&query_hash=eq.6cbf22c3fb3726ff5e31fd4e94d6da4336a9dfe9&platform=eq.resale&fetched_at=gte.2026-11-17T04%3A59%3A01%2B00%3A00 "HTTP/1.1 200 OK"
+2026-11-17 23:59:02,283 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:59:04,783 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/rpc/increment_api_usage "HTTP/1.1 200 OK"
+2026-11-17 23:59:04,783 WARNING fitfindr.live_calls live call host=fashion-resale-api.p.rapidapi.com time=2026-11-18T04:59:04+00:00 status=200 count=5/40
+2026-11-17 23:59:05,337 INFO httpx HTTP Request: POST https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/search_cache?on_conflict=query_hash%2Cplatform "HTTP/1.1 200 OK"
+2026-11-17 23:59:05,716 INFO httpx HTTP Request: GET https://ecqyizmkcgbubxmjwcim.supabase.co/rest/v1/api_usage?select=count&host=eq.fashion-resale-api.p.rapidapi.com&month=eq.2026-11-01 "HTTP/1.1 200 OK"
+2026-11-17 23:59:05,716 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 1, "will_retry": true, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:59:07,217 WARNING fitfindr.failures {"event": "store_failure", "store": "etsy", "platforms": ["etsy"], "kind": "timeout", "http_status": null, "attempt": 2, "will_retry": false, "detail": "injected (FITFINDR_FAIL_STORE)"}
+2026-11-17 23:59:07,631 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:59:08,006 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+2026-11-17 23:59:08,194 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents "HTTP/1.1 200 OK"
+[18] search_listings
+      in:  dict with keys: description
+      out: dict with keys: count, top
+      →    gemini
+2026-11-17 23:59:08,996 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-11-17 23:59:09,005 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:59:12,126 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[19] suggest_outfit
+      in:  dict with keys: listing_index
+      out: dict with keys: styled, outfit
+      →    gemini
+2026-11-17 23:59:14,286 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+  [rate limit] 15 requests used this minute. Waiting 32s. This is normal.
+2026-11-17 23:59:46,355 INFO google_genai.models AFC is enabled with max remote calls: 10.
+2026-11-17 23:59:48,119 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+[20] create_fit_card
+      in:  dict with keys: description, size, max_price, sizes, min_price, size_from_profile
+      out: dict with keys: caption, written_by, verdict
+      →    gemini
+2026-11-17 23:59:48,128 INFO fitfindr.searchlog search {"ts": "2026-11-18T04:59:48.128+00:00", "run_id": "3fc466f75000", "query": "white denim pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 47936, "partial": true, "failed_stores": ["etsy"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 1, "stores": [{"platform": "depop", "status": "active", "results": 8, "attempts": 1, "latency_ms": 2906}, {"platform": "poshmark", "status": "active", "results": 0, "attempts": 1, "latency_ms": 2906}, {"platform": "mercari", "status": "active", "results": 0, "attempts": 1, "latency_ms": 2906}, {"platform": "ebay", "status": "active", "results": 12, "attempts": 1, "latency_ms": 2906}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 2988, "output": 267, "model_calls": 8}, "cost_usd": 0.000406}
+INFO:     127.0.0.1:51653 - "POST /search HTTP/1.1" 200 OK

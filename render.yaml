@@ -1,0 +1,56 @@
+# Render blueprint for the FitFindr API. Deployed 2026-10-19 as
+# https://fitfindr-api.onrender.com — see docs/DEPLOY.md.
+#
+# Production runs live: APP_ENV=production refuses to start with fixtures, and
+# every RapidAPI call is counted in Supabase api_usage and stops at 40/month/host
+# (Fashion Resale = Depop/Poshmark/Mercari/eBay, Etsy, FB Marketplace).
+# Values marked `sync: false` are secrets or per-deploy URLs: Render asks for them
+# when you create the Blueprint, and they are never stored in this file.
+services:
+  - type: web
+    name: fitfindr-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
+    autoDeploy: false            # deploy on purpose, from the dashboard
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: PYTHONUTF8
+        value: "1"
+      - key: APP_ENV
+        value: production
+      - key: FITFINDR_DATA_MODE
+        value: live
+      - key: FITFINDR_PLANNER          # gemini = the model chooses tools (A1); rules = deterministic
+        value: gemini
+      - key: FITFINDR_STYLIST_LIVE_CALLS   # live searches one closet-item outfit may make (B2)
+        value: "1"
+      - key: FITFINDR_BROADEN_LIVE_FETCHES # extra live searches when a search has < 4 results
+        value: "1"
+      - key: FITFINDR_IMAGE_MODEL          # "AI preview" outfit pictures; free tier has no image quota
+        value: gemini-2.5-flash-image
+      - key: FRONTEND_ORIGINS          # the Vercel URL, e.g. https://fitfindr.vercel.app (no trailing /)
+        sync: false
+      - key: FRONTEND_ORIGIN_REGEX     # optional: Vercel preview URLs, e.g. ^https://fitfindr-[a-z0-9]+-shawn-9964\.vercel\.app$
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RESALE_API_HOST
+        sync: false
+      - key: ETSY_API_HOST
+        sync: false
+      - key: FB_MARKETPLACE_HOST
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

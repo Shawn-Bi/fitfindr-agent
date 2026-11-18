@@ -11,7 +11,8 @@ __pycache__/
 venv/
 .pytest_cache/
 
-# Model response cache and local quota counter (runtime state, not source)
+# Model response cache, local quota counter and search log (runtime state, not source)
+backend/logs/
 backend/.cache/
 backend/.quota.json
 
@@ -49,3 +50,4 @@ KICKOFF_PROMPT.md
 *[Kk]ey*.txt
 *[Ss]ecret*.txt
 *[Cc]redential*
+runs/_profile.jsonl

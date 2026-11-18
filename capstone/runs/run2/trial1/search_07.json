@@ -1,0 +1,66 @@
+{
+ "n": 7,
+ "query": "denim jacket",
+ "http_status": 200,
+ "client_latency_ms": 1880,
+ "result_count": 20,
+ "empty": null,
+ "store_notices": [
+  "Etsy took too long to answer."
+ ],
+ "stores": [
+  {
+   "platform": "ebay",
+   "label": "eBay",
+   "status": "live",
+   "count": 18,
+   "latency_ms": 0
+  },
+  {
+   "platform": "etsy",
+   "label": "Etsy",
+   "status": "error",
+   "count": 0,
+   "reason": "took too long to answer",
+   "kind": "timeout",
+   "attempts": 2,
+   "latency_ms": 1500
+  },
+  {
+   "platform": "depop",
+   "label": "Depop",
+   "status": "live",
+   "count": 2,
+   "latency_ms": 0
+  },
+  {
+   "platform": "poshmark",
+   "label": "Poshmark",
+   "status": "live",
+   "count": 0,
+   "latency_ms": 0
+  },
+  {
+   "platform": "mercari",
+   "label": "Mercari",
+   "status": "live",
+   "count": 0,
+   "latency_ms": 0
+  },
+  {
+   "platform": "fb_marketplace",
+   "label": "FB Marketplace",
+   "status": "coming_soon",
+   "count": 0
+  }
+ ],
+ "agent": {
+  "planner": "none",
+  "steps": [],
+  "ranking": "semantic"
+ },
+ "error": null,
+ "style_http_status": 200,
+ "style_latency_ms": 2076,
+ "styled": true
+}

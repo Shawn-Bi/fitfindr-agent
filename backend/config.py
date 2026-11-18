@@ -108,6 +108,83 @@ SEARCH_RESULT_LIMIT = 10
 # ─── Model ───────────────────────────────────────────────────────────────────
 
 MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
+# Used for one retry when MODEL's free-tier DAILY quota is spent (it resets at
+# midnight Pacific), so styling and outfit picks keep working. Empty = off.
+FALLBACK_MODEL = os.getenv("FITFINDR_FALLBACK_MODEL", "gemini-3-flash-preview").strip()
+# LLM-as-judge (run_eval.py, stylist eval): a different, stronger model than the
+# one being judged, so it isn't grading its own homework.
+JUDGE_MODEL = os.getenv("FITFINDR_JUDGE_MODEL", "gemini-3.5-flash")
+# Semantic ranking (A4): query and listing texts are embedded and compared.
+EMBED_MODEL = os.getenv("FITFINDR_EMBED_MODEL", "gemini-embedding-001")
+EMBED_DIM = 256
+EMBEDDINGS_ENABLED = os.getenv("FITFINDR_EMBEDDINGS", "1") != "0"
+
+# Estimated USD per 1M tokens (input, output), for the cost column in traces.
+# Paid-tier list prices as of Oct 2026; the free tier costs nothing. Update from
+# ai.google.dev/pricing if they change — these are estimates, not a bill.
+PRICES_PER_M = {
+    "gemini-3.5-flash-lite": (0.10, 0.40),
+    "gemini-3.5-flash": (0.30, 2.50),
+    "gemini-3-flash-preview": (0.50, 3.00),
+    "gemini-embedding-001": (0.15, 0.0),
+}
+
+
+def estimated_cost(model: str, prompt_tokens: int, output_tokens: int) -> float:
+    price_in, price_out = PRICES_PER_M.get(model, (0.30, 2.50))
+    return (prompt_tokens * price_in + output_tokens * price_out) / 1_000_000
+
+
+# ─── The tool-choosing agent (agent.py, A1) ──────────────────────────────────
+# gemini: the model picks each next tool by function calling.
+# rules:  the deterministic policy (also the fallback when the model fails).
+AGENT_PLANNER = os.getenv("FITFINDR_PLANNER", "gemini").strip().lower()
+AGENT_MAX_STEPS = 8          # tool calls per run, then the deterministic fallback finishes
+
+# ─── The AI stylist (stylist.py, B2) ─────────────────────────────────────────
+# Live RapidAPI searches one outfit may make when a planned piece has no
+# cached listing (live mode only). Adding or editing a closet item rebuilds its
+# outfit, so this is the per-edit cost against the 40-call monthly stop line.
+STYLIST_LIVE_CALLS = int(os.getenv("FITFINDR_STYLIST_LIVE_CALLS", "1"))
+
+# Image model for "AI preview" tiles: a planned outfit piece with no real
+# listing at all gets one generated flat-lay, stored in Supabase Storage and
+# reused. Empty = off. The free tier has no image quota (Oct 2026: HTTP 429),
+# so the stylist falls back to the closest cached listing photo.
+IMAGE_MODEL = os.getenv("FITFINDR_IMAGE_MODEL", "gemini-2.5-flash-image").strip()
+
+# ─── Search broadening (tools.search_broadened) ──────────────────────────────
+# A search with fewer than 4 results widens step by step. Query rewrites are
+# new store searches: at most this many extra live searches per user search
+# (each is one call per store host); later steps use the 24 h cache only.
+BROADEN_LIVE_FETCHES = int(os.getenv("FITFINDR_BROADEN_LIVE_FETCHES", "2"))
+
+# Which hosts may make live calls (comma-separated env var names, e.g.
+# "RESALE_API_HOST"). Empty = all. Others still serve their 24 h cache. For
+# scripts that must stay inside a per-host call budget.
+LIVE_SOURCES = {s.strip() for s in os.getenv("FITFINDR_LIVE_SOURCES", "").split(",") if s.strip()}
+
+
+# ─── Store failure handling (sources/failures.py) ────────────────────────────
+# How long one store may take before it counts as failed (the HTTP timeout of
+# each live request), and the retry rule: a timeout or a 429 is retried
+# RETRY_MAX times (once), after RETRY_BACKOFF_SECONDS. Nothing else is retried.
+STORE_TIMEOUT_SECONDS = float(os.getenv("FITFINDR_STORE_TIMEOUT", "20"))
+RETRY_MAX = int(os.getenv("FITFINDR_RETRY_MAX", "1"))
+RETRY_BACKOFF_SECONDS = float(os.getenv("FITFINDR_RETRY_BACKOFF", "1.5"))
+
+# One JSON record per search (searchlog.py): a line in this file, and a row in
+# the Supabase `traces` table. SEARCH_LOG_DB=0 keeps it to the file (the
+# benchmark script uses that so it never writes to the database).
+LOG_DIR = ROOT / "logs"
+SEARCH_LOG_PATH = Path(os.getenv("FITFINDR_SEARCH_LOG", "").strip() or LOG_DIR / "searches.jsonl")
+SEARCH_LOG_DB = os.getenv("FITFINDR_SEARCH_LOG_DB", "1") != "0"
+
+# Trigger a store failure on purpose, e.g. "depop:timeout,etsy:429:once". See
+# sources/failures.py. Test only: production refuses to start with it set.
+FAIL_STORE = os.getenv("FITFINDR_FAIL_STORE", "").strip()
+if FAIL_STORE and APP_ENV == "production":
+    raise SystemExit("Refusing to start: FITFINDR_FAIL_STORE is for testing and must be empty in production.")
 
 
 # ─── Rate limiting and quota guards ──────────────────────────────────────────
@@ -127,6 +204,7 @@ MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
 
 REQUESTS_PER_MINUTE = 15
 SESSION_REQUEST_BUDGET = 300
+RUN_REQUEST_BUDGET = 25      # model calls inside one metered run (one search, one outfit)
 MAX_RETRIES = 5
 
 CACHE_DIR = ROOT / ".cache"
@@ -137,5 +215,23 @@ CACHE_DIR = ROOT / ".cache"
 DATA_DIR = ROOT / "data"                       # example wardrobe only, no listings
 RESULTS_DIR = ROOT / "results"
 FIXTURES_DIR = ROOT / "tests" / "fixtures"     # recorded real API responses
-QUOTA_FILE = ROOT / ".quota.json"              # TODO: move to Supabase api_usage
-CACHE_MAX_AGE_HOURS = 24                       # real-response cache lifetime
+CACHE_MAX_AGE_HOURS = 24                       # real-response cache lifetime (search_cache)
+# The RapidAPI call counter lives in Supabase api_usage (sources/quota.py).
+
+
+# ─── Web API (api/main.py) ───────────────────────────────────────────────────
+
+SEARCHES_PER_MINUTE = 10                       # per signed-in user, or per IP for guests
+WEB_RESULT_LIMIT = 20                          # listings on one results page
+MAX_PHOTO_BYTES = 10 * 1024 * 1024             # 10 MB, PRD section 4
+PHOTO_MAX_PX = 1600                            # main image, longest side
+THUMB_MAX_PX = 400
+# Browser origins allowed to call the API (comma-separated). The Next.js dev
+# server by default; set FRONTEND_ORIGINS to the Vercel URL in production.
+FRONTEND_ORIGINS = [o.strip() for o in os.getenv(
+    "FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+# Optional: also allow origins matching this regex, e.g. the Vercel preview
+# URLs of this project: ^https://fitfindr-[a-z0-9]+-shawn-9964\.vercel\.app$
+FRONTEND_ORIGIN_REGEX = os.getenv("FRONTEND_ORIGIN_REGEX", "").strip() or None
+if APP_ENV == "production" and not os.getenv("FRONTEND_ORIGINS", "").strip():
+    raise SystemExit("Refusing to start: production needs FRONTEND_ORIGINS (the Vercel URL) for CORS.")

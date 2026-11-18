@@ -1,0 +1,110 @@
+{
+ "trial1": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "10/10",
+  "c3_met": true,
+  "latency_ms": {
+   "mean": 1953,
+   "median": 1928,
+   "max": 2195,
+   "min": 1878,
+   "all": [
+    2195,
+    1925,
+    2045,
+    1905,
+    1932,
+    1935,
+    1880,
+    1890,
+    1949,
+    1878
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000157,
+  "c5_met": true,
+  "mean_tokens": 851,
+  "mean_model_calls": 0,
+  "live_calls": 0,
+  "styled_ok": "10/10",
+  "full_ms_mean": 4716
+ },
+ "trial2": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "10/10",
+  "c3_met": true,
+  "latency_ms": {
+   "mean": 2038,
+   "median": 1932,
+   "max": 2355,
+   "min": 1897,
+   "all": [
+    2145,
+    1915,
+    1919,
+    2355,
+    2303,
+    1939,
+    2070,
+    1926,
+    1897,
+    1914
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000158,
+  "c5_met": true,
+  "mean_tokens": 855,
+  "mean_model_calls": 0,
+  "live_calls": 0,
+  "styled_ok": "10/10",
+  "full_ms_mean": 6317
+ },
+ "trial3": {
+  "c1_searches_with_results": "10/10",
+  "c1_met": true,
+  "c2_searches_naming_store_and_reason": "10/10",
+  "c2_met": true,
+  "c3_under_3s": "10/10",
+  "c3_met": true,
+  "latency_ms": {
+   "mean": 1985,
+   "median": 1960,
+   "max": 2244,
+   "min": 1889,
+   "all": [
+    2036,
+    1969,
+    2244,
+    1963,
+    1889,
+    1946,
+    1963,
+    1945,
+    1936,
+    1956
+   ]
+  },
+  "c4_records_complete": "10/10",
+  "c4_met": true,
+  "c4_record_count": 10,
+  "c5_mean_cost_usd": 0.000155,
+  "c5_met": true,
+  "mean_tokens": 846,
+  "mean_model_calls": 0,
+  "live_calls": 0,
+  "styled_ok": "10/10",
+  "full_ms_mean": 7327
+ }
+}

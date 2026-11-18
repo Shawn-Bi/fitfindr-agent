@@ -49,6 +49,20 @@ SCENARIOS = [
         "wardrobe": "example",
         "criterion": 4,
     },
+    {
+        # Criterion 6 (v2): a size nothing matches → relax_search drops the size, once.
+        "name": "auto-relax drops the size and says so",
+        "query": "denim jacket size XXS under $50",
+        "wardrobe": "example",
+        "criterion": 6,
+    },
+    {
+        # Criterion 7 (v2): too vague to search → one clarifying question, no search.
+        "name": "vague request gets one clarifying question",
+        "query": "something nice",
+        "wardrobe": "example",
+        "criterion": 7,
+    },
 ]
 
 WARDROBES = ("example", "empty")

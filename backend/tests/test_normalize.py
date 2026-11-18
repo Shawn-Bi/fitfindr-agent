@@ -12,6 +12,7 @@ import json
 import os
 import unittest
 
+os.environ["RAPIDAPI_KEY"] = ""                 # never reach RapidAPI, however the tests are started
 os.environ["FITFINDR_DATA_MODE"] = "fixtures"   # before config is imported
 
 import config  # noqa: E402
@@ -86,7 +87,13 @@ class SearchListingsFixturesTest(unittest.TestCase):
     def test_fixtures_mode_reads_only_fixtures(self):
         listings, statuses = fetch_candidates("anything")
         self.assertTrue(listings)
-        self.assertTrue(all(s["status"] == "fixtures" for s in statuses))
+        by_platform = {s["platform"]: s["status"] for s in statuses}
+        for platform in ("depop", "poshmark", "mercari", "ebay", "etsy"):
+            self.assertEqual(by_platform[platform], "fixtures")
+        # host not subscribed: shown as Coming soon, never filled with anything
+        self.assertEqual(by_platform["fb_marketplace"], "coming_soon")
+        self.assertTrue([x for x in listings if x["platform"] == "etsy"])
+        self.assertFalse([x for x in listings if x["platform"] == "fb_marketplace"])
 
     def test_price_ceiling_respected(self):
         results = search_listings("vintage graphic tee", max_price=30)
