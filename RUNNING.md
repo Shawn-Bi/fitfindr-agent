@@ -165,3 +165,12 @@ writes to the database.
   Vercel, Supabase) is on free plans and is not counted.
 - The model response cache is switched off in the benchmark, so repeating the
   run measures real calls rather than cached answers.
+
+## Capstone trials
+
+`capstone/run_trials.py` runs the capstone criteria (README, "Capstone"): `prime` makes at most 5 live
+Fashion Resale calls to fill the 24 h cache, `trials` runs 3 trials of 10 searches with
+`FITFINDR_FAIL_STORE=etsy:timeout` and no live calls (`--split` sends what the results page sends now:
+results first, then `/search/style`). Output lands in `capstone/runs/<label>/`.
+`capstone/profile_stages.py` times the stages of one search. Keep 30 s between searches: one search made
+about 5 model calls before the improvement and the free tier allows 15 a minute.
