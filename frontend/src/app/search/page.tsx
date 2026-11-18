@@ -231,8 +231,10 @@ function Results() {
   const [busy, setBusy] = useState(false);
   const [styling, setStyling] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  // A filter or chip change re-searches at once with style=false (no model
-  // calls); a new query, a refresh or a back/forward visit runs the full agent.
+  // Every search asks for results only (style=false, no model calls on the way
+  // to the results); the styling and fit card for the best match follow from
+  // /search/style. A filter or chip change additionally waits 300 ms (below).
+  // Capstone improvement: the first search used to wait for the whole agent run.
   const quickNext = useRef(false);
   const dataRef = useRef<SearchResponse | null>(null);
   dataRef.current = data;
@@ -271,7 +273,7 @@ function Results() {
           no_size: state.no_size,
           no_price: state.no_price,
           ...filtersToBody(state.filters),
-          style: !quick,
+          style: false, // results first; styleBest() asks /search/style for the best match afterwards
         },
         signal: ctrl.signal,
       })

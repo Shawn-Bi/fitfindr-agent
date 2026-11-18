@@ -296,6 +296,25 @@ all five stores carry `kind: timeout` and `attempts: 2`.
 {"ts": "2026-11-18T05:20:13.079+00:00", "run_id": "1674bcd18ee1", "query": "denim jacket", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "all_stores_down", "error": null, "result_count": 0, "total_latency_ms": 6004, "partial": false, "failed_stores": ["depop", "ebay", "etsy", "mercari", "poshmark"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "poshmark", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "mercari", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "ebay", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 0, "output": 0, "model_calls": 0}, "cost_usd": 0.0}
 ```
 
+**What It Costs.** Measured by the trials themselves. Each search's record holds the token counts
+Gemini reports for its model calls (`usage_metadata`, summed by `generate.py`) and `cost_usd`, which
+`config.py::estimated_cost` prices at the paid-tier list prices in `PRICES_PER_M`
+(`gemini-3.5-flash-lite`: $0.10 per million input tokens, $0.40 per million output tokens). The free tier
+actually bills $0; this is what the same traffic would cost on the paid tier. Average per search over
+the 30 searches of each run (a search includes its styling call and caption):
+
+| Version | Tokens per search | Model calls | Average cost per search |
+|---|---|---|---|
+| Before the improvement (run 1) | about 3,320 | 5 | $0.000421 |
+| After the improvement (run 2) | about 851 | 2 | $0.000157 |
+
+With the current version, 100 users x 5 searches a day is 500 searches a day:
+500 x $0.000157 = **$0.08 a day**, and 15,000 searches over 30 days = **$2.36 a month**
+(before the improvement: $0.21 a day, $6.31 a month). That is about 1.6% of the $150 monthly budget.
+Not counted: the ranking embeddings (`generate.py::embed`; their calls were not metered separately), RapidAPI (free plan,
+capped at 40 calls a month per host) and hosting (free plans). A real search that misses the 24 h cache
+adds one live store call, which costs quota, not dollars.
+
 **Run Log and Verdicts.** Setup for every trial: local server (`uvicorn`, a separate
 process, so latency includes HTTP), warmed with 2 searches that are not counted,
 `FITFINDR_FAIL_STORE=etsy:timeout`, the RapidAPI key blanked (no live call possible),
@@ -337,3 +356,81 @@ Real output for each criterion, from run 1 (trial 2, raw files in `capstone/runs
   the 10 searches is $0.000423.
 
 Summaries per trial: `capstone/runs/run1/summary.json`; console output: `capstone/runs/run1_console.txt`.
+
+**The Improvement.** Diagnosis first. Only criterion 3 missed (all 30 searches of run 1 took 5.3 to
+16.7 s, the target was under 3 s). `capstone/profile_stages.py` timed the stages of three primed
+searches (`capstone/runs/profile_before.txt`):
+
+| Stage | Time per search | Mechanism |
+|---|---|---|
+| Model: outfit and fit card | about 2.1 s | `suggest_outfit` then `create_fit_card_full`, two sequential Gemini calls |
+| Model: planner turns | about 3.0 s | `agent.py::run_gemini` makes 3 `generate_with_tools` calls to choose the next tool, one after another |
+| Stores | about 2.0 s | `sources/__init__.py::fetch_candidates`: 0.5 s Supabase cache read, plus the fixed 1.5 s retry backoff for the failed store (`failures.call`) |
+
+The mechanism is serial work: the first search waited for the whole agent run, about 5 model calls
+that each need the previous answer, before it could show any result. Removing the failed store's
+retry would save only 1.5 s of about 6, so it could not meet the target. The results themselves were
+ready after the store stage; the model calls only produce the outfit and caption for the best match.
+
+**The change (one):** the results page now asks `/search` for results only (`style: false`) on every search,
+not just on filter changes, and then fetches the outfit and caption from `/search/style`. Both routes
+already existed (`frontend/src/app/search/page.tsx`, one line plus a comment). One supporting change:
+`/search/style` now writes its own search-log record (`api/main.py::style_listing`, outcome `style` or
+`style_error`), because the model calls moved there and criterion 5 must still be measurable. Run 2 repeats
+`run_trials.py` with `--split`, which sends exactly those two requests per search. Everything else matches run 1
+(same server settings, same 5 cached queries, 30 s spacing). Raw output: `capstone/runs/run2/`.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Results despite one store timing out | at least 9/10 searches return results | 10/10 | 10/10 | 10/10 | MET |
+| 2. Failed store named, with the reason | at least 9/10 | 10/10 | 10/10 | 10/10 | MET |
+| 3. Search finishes in under 3 s (warm) | at least 9/10 under 3 s | 10/10 (mean 1.95 s, max 2.20 s) | 10/10 (mean 2.04 s, max 2.36 s) | 10/10 (mean 1.99 s, max 2.24 s) | MET |
+| 4. One complete log record per failed store call | 10/10 | 10/10 | 10/10 | 10/10 | MET |
+| 5. Average cost per search | under $0.01 | $0.000157 | $0.000158 | $0.000155 | MET |
+
+(Run 1 to 3 here are the three trials of the second set; the first set's table is above.)
+
+Did it help? Yes for what the criteria measure: criterion 3 went from 0/10 in every trial to 10/10 in every trial,
+and cost per search fell by about 63%, because the planner's three model turns no longer run on the web path. What it made worse:
+
+- **The complete answer is slower and less steady.** Results come in about 2 s, but the outfit and caption then take
+  1.8 to 15.1 s (`style_latency_ms` in the `search_XX.json` files), so results plus styling took a mean of
+  4.7, 6.3 and 7.3 s per trial, against 8.0, 6.4 and 6.1 s before. It was worse in two of three trials, and the spread grew in trial 3.
+  I did not find the cause of the slow stylings.
+- **The Gemini planner no longer chooses tools on a web search.** The page's first search now uses the same fixed
+  path as a filter change (search, then style). Vague queries still go through the agent for the clarifying question,
+  and the agent loop is still what the CLI and MCP use. So "the model picks the tools" is now less true of the web app.
+- **One more request per search**, and a short moment where results show without the outfit (the page already shows a
+  styling placeholder for that case).
+- **The margin is thin.** 2.0 s of a 3 s target is 1.5 s of the failed store's backoff plus the cache read.
+- I type-checked the frontend change (`npx tsc --noEmit`, clean) but did not click through it in a browser.
+
+Which target was set too low? No target was missed after the fix, but two were loose or blind.
+**Criterion 5** is about 60 times above the measured $0.000157: I would tighten it to under $0.001 per search,
+still 6x headroom for longer prompts. **Criterion 3** passes against a fault that is not like a real one:
+`FITFINDR_FAIL_STORE=etsy:timeout` fails at once, so the only wait is the 1.5 s backoff. A real timeout
+waits `FITFINDR_STORE_TIMEOUT` (20 s), is retried, and waits again: 2 x 20 s + 1.5 s = 41.5 s per failing store, and the
+stores are fetched one after the other (computed from the code, not measured). I would tighten criterion 3 to
+"with a store that really hangs, under 3 s", which this code would fail.
+
+**What's Still Broken.**
+
+- **A real store timeout.** Stores are fetched in sequence and each waits the full 20 s, twice. I would fetch all stores in parallel under one
+  search-wide deadline of about 2.5 s and return what has arrived. I stopped because no criterion exercises it and
+  it needs a test host that really hangs, which I did not build.
+- **Slow, variable styling (up to 15 s).** I would stream the outfit text, or start the styling while the results render.
+  I stopped because the cause (Gemini latency, the 15 a minute pacing, or the extra round trip) is unproven, and
+  guessing would not be a fix.
+- **Criterion 2 was scored on the API response**, not on a screenshot of the page; the page renders that text from `store_notices`.
+  I would add one browser check. I stopped because the sentence is generated in one place and unit-tested.
+- **Narrow test coverage.** Ten searches are five queries twice, all with the same store failing, with the other stores
+  served from a 24 h cache (the 5 live calls were the whole budget), so nothing tested a live store answering slowly, or other fault kinds under
+  the clock. I stopped at the call budget.
+
+The one thing to do next, with another unit: run the stores in parallel with a hard per-search deadline, and test it against a host that
+actually hangs, because that is the failure a user will really meet and my criteria cannot see it yet. After that, I would tighten
+criteria 3 and 5 as described above.
+
+**How I Used AI.**
+
+TODO: I will write this section myself.

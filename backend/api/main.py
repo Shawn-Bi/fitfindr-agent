@@ -831,12 +831,18 @@ def style_listing(body: StyleIn, request: Request, user: User | None = Depends(o
             card = create_fit_card_full(outfit, item)
     except Exception as exc:  # noqa: BLE001 — results still stand; only the styling is missing
         log.warning("styling failed: %s", config.redact(exc))
+        searchlog.write(searchlog.build(body.q, {}, usage={}, outcome="style_error", error=f"{type(exc).__name__}: {exc}",
+                                        total_latency_ms=round((time.monotonic() - started) * 1000),
+                                        signed_in=user is not None), db=False)
         return {"styling": {"text": None, "items": [], "unavailable": STYLING_UNAVAILABLE},
                 "fit_card": None, "fit_verdict": None}
     observe.save_usage("style", body.q, user.id if user else None,
                        {**m, "latency_ms": int((time.monotonic() - started) * 1000), "tool_calls": 2},
                        [{"tool": "suggest_outfit", "result": outfit.get("text")},
                         {"tool": "create_fit_card", "result": card["caption"]}])
+    # The styling model calls now happen here, so their tokens and cost go in the search log too.
+    searchlog.write(searchlog.build(body.q, {}, usage=m, outcome="style", signed_in=user is not None,
+                                    total_latency_ms=round((time.monotonic() - started) * 1000)), db=False)
     return {"styling": _styling_out(user, closet, outfit), "fit_card": card["caption"],
             "fit_verdict": card["verdict"]}
 

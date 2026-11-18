@@ -64,8 +64,8 @@ def start_server(env: dict, out_path: Path):
     raise SystemExit("server did not start; see " + str(out_path))
 
 
-def post_search(q: str) -> tuple[int, dict, float]:
-    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/search", data=json.dumps({"q": q}).encode(),
+def post_search(q: str, path: str = "/search", payload: dict | None = None) -> tuple[int, dict, float]:
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", data=json.dumps(payload or {"q": q}).encode(),
                                  headers={"content-type": "application/json"})
     t0 = time.perf_counter()
     try:
@@ -90,18 +90,21 @@ def read_records(path: Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-def run_searches(queries: list[str], out_dir: Path | None, offset: int = 0) -> list[dict]:
+def run_searches(queries: list[str], out_dir: Path | None, split: bool = False) -> list[dict]:
     rows, last = [], 0.0
     for i, q in enumerate(queries, 1):
         wait = SPACING - (time.perf_counter() - last)
         if last and wait > 0:
             time.sleep(wait)
         last = time.perf_counter()
-        status, body, ms = post_search(q)
+        status, body, ms = post_search(q, payload={"q": q, "style": False} if split else None)
         row = {"n": i, "query": q, "http_status": status, "client_latency_ms": round(ms),
                "result_count": len(body.get("results") or []), "empty": body.get("empty"),
                "store_notices": body.get("store_notices"), "stores": body.get("stores"),
                "agent": body.get("agent"), "error": body.get("error")}
+        if split and body.get("results"):   # what the page does next: styling for the best match
+            st, sb, sms = post_search(q, "/search/style", {"q": q, "listing": body["results"][0]})
+            row.update(style_http_status=st, style_latency_ms=round(sms), styled=bool((sb.get("styling") or {}).get("text")))
         rows.append(row)
         print(f"  {i:2}. {status} {round(ms):6} ms  results={row['result_count']:2}  notices={row['store_notices']}  {q}", flush=True)
         if out_dir:
@@ -109,8 +112,10 @@ def run_searches(queries: list[str], out_dir: Path | None, offset: int = 0) -> l
     return rows
 
 
-def score(rows: list[dict], records: list[dict]) -> dict:
+def score(rows: list[dict], all_records: list[dict]) -> dict:
     n = len(rows)
+    records = [r for r in all_records if r["outcome"] not in ("style", "style_error")]
+    style = [r for r in all_records if r["outcome"] in ("style", "style_error")]   # empty before the improvement
     c1 = sum(1 for r in rows if r["http_status"] == 200 and r["result_count"] > 0)
     c2 = sum(1 for r in rows if any("Etsy" in s and "took too long to answer" in s for s in (r["store_notices"] or [])))
     lat = [r["client_latency_ms"] for r in rows]
@@ -120,8 +125,13 @@ def score(rows: list[dict], records: list[dict]) -> dict:
         e = next((s for s in rec.get("stores", []) if s.get("platform") == "etsy" and s.get("status") == "error"), None)
         return bool(rec.get("ts") and e and e.get("kind") and e.get("latency_ms") is not None and e.get("attempts"))
     c4 = sum(1 for rec in records if has_failure_record(rec))
+    # a search costs its own model calls plus (after the improvement) its styling call
     costs = [rec["cost_usd"] for rec in records]
+    if style:
+        costs = [c + s_["cost_usd"] for c, s_ in zip(costs, style)]
     toks = [rec["tokens"]["prompt"] + rec["tokens"]["output"] for rec in records]
+    if style:
+        toks = [t + s_["tokens"]["prompt"] + s_["tokens"]["output"] for t, s_ in zip(toks, style)]
     return {
         "c1_searches_with_results": f"{c1}/{n}", "c1_met": c1 >= 9,
         "c2_searches_naming_store_and_reason": f"{c2}/{n}", "c2_met": c2 >= 9,
@@ -135,6 +145,8 @@ def score(rows: list[dict], records: list[dict]) -> dict:
         "mean_tokens": round(statistics.mean(toks)) if toks else None,
         "mean_model_calls": round(statistics.mean(r["tokens"]["model_calls"] for r in records), 1) if records else None,
         "live_calls": sum(r.get("live_calls", 0) for r in records),
+        "styled_ok": f"{sum(1 for r in rows if r.get('styled'))}/{n}" if style else None,
+        "full_ms_mean": round(statistics.mean(r["client_latency_ms"] + r.get("style_latency_ms", 0) for r in rows)),
     }
 
 
@@ -143,6 +155,7 @@ def main() -> int:
     ap.add_argument("mode", choices=["prime", "trials"])
     ap.add_argument("--label", required=True)
     ap.add_argument("--trials", type=int, default=3)
+    ap.add_argument("--split", action="store_true", help="results-first: /search with style=false, then /search/style (run 2)")
     args = ap.parse_args()
     out = HERE / "runs" / args.label
     out.mkdir(parents=True, exist_ok=True)
@@ -167,7 +180,7 @@ def main() -> int:
     summary = {}
     try:
         print("warm-up (not counted):")
-        run_searches(QUERIES[:2], None)
+        run_searches(QUERIES[:2], None, args.split)
         warm = len(read_records(log_path))
         for t in range(1, args.trials + 1):
             print(f"trial {t}:")
@@ -175,7 +188,7 @@ def main() -> int:
             tdir.mkdir(exist_ok=True)
             time.sleep(SPACING)
             start = len(read_records(log_path))
-            rows = run_searches(QUERIES * 2, tdir)
+            rows = run_searches(QUERIES * 2, tdir, args.split)
             recs = read_records(log_path)[start:]
             (tdir / "records.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs), encoding="utf-8")
             summary[f"trial{t}"] = score(rows, recs)
