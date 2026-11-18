@@ -247,3 +247,93 @@ without spending quota. Details: [docs/FAILURE_HANDLING.md](docs/FAILURE_HANDLIN
 returns the other stores' results, shows which store is unavailable and why in
 plain words, and logs the failure. Out of scope: adding new stores, the
 stylist, and any UI redesign.
+
+**Running It.** Path A is the deployed app: open https://fitfindr-ten.vercel.app
+(wake the API first by opening https://fitfindr-api.onrender.com/health and
+waiting for `{"ok":true,...}`; Render's free plan sleeps after 15 idle minutes).
+[RUNNING.md](RUNNING.md) has the deploy details, the local backup (Path B), how
+to force a store failure and how the log and the benchmark work. The trials below
+ran against a local copy of the same code, because `FITFINDR_FAIL_STORE` is
+refused when `APP_ENV=production`:
+
+```powershell
+cd backend; .venv\Scripts\Activate.ps1
+python ../capstone/run_trials.py prime  --label prime    # the only step that spends RapidAPI calls (5)
+python ../capstone/run_trials.py trials --label run1     # 3 trials x 10 searches, no live calls
+```
+
+**Instrumentation.** Every `POST /search` writes one JSON record
+(`backend/searchlog.py`) to `backend/logs/searches.jsonl` and to the `traces`
+table, including searches that fail. A record holds: `ts` (UTC), `run_id`,
+`query`, `filters`, `outcome` (`completed`, `empty`, `all_stores_down`,
+`rejected`, `error`), `result_count`, `total_latency_ms`, `partial`,
+`failed_stores`, `stores_called`, `live_calls`, one entry per store in `stores`
+(`status`, `kind` = error type, `reason`, `attempts` = 1 + retries,
+`latency_ms`, redacted `error`, `results`), `tokens`
+(`prompt`, `output`, `model_calls`) and `cost_usd`. No key, user id or listing
+text is ever written. Each failed store attempt also logs a `store_failure` line
+(`sources/failures.py::log_failure`). Ten real records (run 1, trial 1; Etsy
+forced to time out, the other stores served from the 24 h cache):
+
+```json
+{"ts": "2026-11-18T05:02:03.050+00:00", "run_id": "2815b338bfff", "query": "vintage graphic tee", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 16743, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 7, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 1, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 12, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3031, "output": 293, "model_calls": 5}, "cost_usd": 0.00042}
+{"ts": "2026-11-18T05:02:23.338+00:00", "run_id": "bbf9028955f6", "query": "denim jacket", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 7014, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 2, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 18, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3008, "output": 290, "model_calls": 5}, "cost_usd": 0.000417}
+{"ts": "2026-11-18T05:02:54.186+00:00", "run_id": "89a58fb24cba", "query": "flannel shirt", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 7854, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 10, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 10, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3039, "output": 281, "model_calls": 5}, "cost_usd": 0.000416}
+{"ts": "2026-11-18T05:03:22.628+00:00", "run_id": "c3dd5bbe4c16", "query": "corduroy pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 6309, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 2, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 18, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3131, "output": 319, "model_calls": 5}, "cost_usd": 0.000441}
+{"ts": "2026-11-18T05:03:52.976+00:00", "run_id": "1e8aac5f490b", "query": "white denim pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 6648, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 8, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 12, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1515, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 2982, "output": 280, "model_calls": 5}, "cost_usd": 0.00041}
+{"ts": "2026-11-18T05:04:24.774+00:00", "run_id": "65cd24e7b5e5", "query": "vintage graphic tee", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 8448, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 7, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 1, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 12, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3021, "output": 302, "model_calls": 5}, "cost_usd": 0.000423}
+{"ts": "2026-11-18T05:04:53.934+00:00", "run_id": "740a41813422", "query": "denim jacket", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 7614, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 2, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 18, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 2956, "output": 249, "model_calls": 5}, "cost_usd": 0.000395}
+{"ts": "2026-11-18T05:05:23.599+00:00", "run_id": "80d2009b623b", "query": "flannel shirt", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 7268, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 10, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 10, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3059, "output": 313, "model_calls": 5}, "cost_usd": 0.000431}
+{"ts": "2026-11-18T05:05:52.880+00:00", "run_id": "9539775af8df", "query": "corduroy pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 6548, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 2, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 18, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 3053, "output": 292, "model_calls": 5}, "cost_usd": 0.000422}
+{"ts": "2026-11-18T05:06:21.571+00:00", "run_id": "fed4ea39aaa8", "query": "white denim pants", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "completed", "error": null, "result_count": 20, "total_latency_ms": 5246, "partial": true, "failed_stores": ["etsy"], "stores_called": ["etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "cached", "results": 8, "latency_ms": 0}, {"platform": "poshmark", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "mercari", "status": "cached", "results": 0, "latency_ms": 0}, {"platform": "ebay", "status": "cached", "results": 12, "latency_ms": 0}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 2952, "output": 264, "model_calls": 5}, "cost_usd": 0.000401}
+```
+
+A failed run (every store forced to time out with `FITFINDR_FAIL_STORE='*:timeout'`;
+file `capstone/runs/failed_run/records.jsonl`): `outcome` is `all_stores_down`, no results,
+all five stores carry `kind: timeout` and `attempts: 2`.
+
+```json
+{"ts": "2026-11-18T05:20:13.079+00:00", "run_id": "1674bcd18ee1", "query": "denim jacket", "filters": {}, "signed_in": false, "data_mode": "live", "outcome": "all_stores_down", "error": null, "result_count": 0, "total_latency_ms": 6004, "partial": false, "failed_stores": ["depop", "ebay", "etsy", "mercari", "poshmark"], "stores_called": ["depop", "poshmark", "mercari", "ebay", "etsy"], "live_calls": 0, "stores": [{"platform": "depop", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "poshmark", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "mercari", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "ebay", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}, {"platform": "fb_marketplace", "status": "coming_soon", "results": 0}], "tokens": {"prompt": 0, "output": 0, "model_calls": 0}, "cost_usd": 0.0}
+```
+
+**Run Log and Verdicts.** Setup for every trial: local server (`uvicorn`, a separate
+process, so latency includes HTTP), warmed with 2 searches that are not counted,
+`FITFINDR_FAIL_STORE=etsy:timeout`, the RapidAPI key blanked (no live call possible),
+the model response cache off. The 24 h cache was empty (the newest entry was a month old), so
+`capstone/run_trials.py prime` first made **5 live calls to the Fashion Resale host**
+(one per query, counted by `sources/quota.py`: the November counter went 0 to 5); the trials then
+ran the same 5 queries twice each (10 searches), served from that cache, so the other stores
+really answered. One trial's 10 searches serve criteria 1 to 5, because all ten are
+forced-failure searches. Searches are 30 s apart: one search makes about 5 model calls and the
+free Gemini tier allows 15 a minute (`generate.py::_wait_for_slot`). A first attempt with
+6.6 s spacing was thrown away because it measured that throttle (`capstone/discarded/`).
+Trials 1 to 3 changed nothing in between.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Results despite one store timing out | at least 9/10 searches return results | 10/10 | 10/10 | 10/10 | MET |
+| 2. Failed store named, with the reason | at least 9/10 | 10/10 | 10/10 | 10/10 | MET |
+| 3. Search finishes in under 3 s (warm) | at least 9/10 under 3 s | 0/10 (mean 8.0 s) | 0/10 (mean 6.4 s) | 0/10 (mean 6.1 s) | MISSED |
+| 4. One complete log record per failed store call | 10/10 | 10/10 | 10/10 | 10/10 | MET |
+| 5. Average cost per search | under $0.01 | $0.000418 | $0.000423 | $0.000423 | MET |
+
+Real output for each criterion, from run 1 (trial 2, raw files in `capstone/runs/run1/trial2/`):
+
+- **Criteria 1 and 2.** `search_01.json`, written by `capstone/run_trials.py::run_searches` from the
+  response of `api/main.py::search` (the sentence comes from `api/catalog.py::store_notices`):
+  `http_status 200`, `result_count 20`, `store_notices ['Etsy took too long to answer.']`; the
+  per-store panel shows eBay, Depop and Poshmark `live`, Etsy `error`, kind `timeout`.
+  Scored on the API response, which the results page prints as-is (`frontend/src/app/search/page.tsx`
+  renders `data.store_notices`); I did not screenshot the page.
+- **Criterion 3.** The `client_latency_ms` field of the same ten files, measured by
+  `run_trials.py::post_search` around the HTTP call: [6296, 6599, 5854, 6266, 6147, 6230, 6328, 7478, 7006, 5842] ms. The fastest of all 30 searches was 5,265 ms.
+- **Criterion 4.** `records.jsonl`, written by `searchlog.py::write`. The Etsy entry of the first record:
+  `{"platform": "etsy", "status": "error", "results": 0, "kind": "timeout", "reason": "took too long to answer", "attempts": 2, "latency_ms": 1500, "error": "injected (FITFINDR_FAIL_STORE)"}` with `ts` `2026-11-18T05:06:57.878+00:00`: store, error type (`kind`), latency
+  (`latency_ms`) and retries (`attempts` 2 = 1 retry) all present, 10 records for 10 searches. Scored by
+  `run_trials.py::score`.
+- **Criterion 5.** The `tokens` and `cost_usd` fields of the same records: for the first record
+  `{"prompt": 3005, "output": 310, "model_calls": 5}`, `cost_usd 0.000425`. Tokens are counted by
+  `generate.py` from Gemini's usage metadata and priced by `config.py::estimated_cost`; mean over
+  the 10 searches is $0.000423.
+
+Summaries per trial: `capstone/runs/run1/summary.json`; console output: `capstone/runs/run1_console.txt`.
