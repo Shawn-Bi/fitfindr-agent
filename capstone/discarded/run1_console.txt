@@ -1,0 +1,3 @@
+warm-up (not counted):
+   1. 200   9160 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   2. 200   5849 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket

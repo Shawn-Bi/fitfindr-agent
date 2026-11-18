@@ -1,0 +1,39 @@
+warm-up (not counted):
+   1. 200   8189 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   2. 200  12932 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+trial 1:
+   1. 200  16748 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   2. 200   7036 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   3. 200   7884 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   4. 200   6325 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+   5. 200   6672 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+   6. 200   8471 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   7. 200   7630 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   8. 200   7294 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   9. 200   6575 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+  10. 200   5265 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+  -> {"c1_searches_with_results": "10/10", "c1_met": true, "c2_searches_naming_store_and_reason": "10/10", "c2_met": true, "c3_under_3s": "0/10", "c3_met": false, "c4_records_complete": "10/10", "c4_met": true, "c4_record_count": 10, "c5_mean_cost_usd": 0.000418, "c5_met": true, "mean_tokens": 3312, "mean_model_calls": 5, "live_calls": 0}
+trial 2:
+   1. 200   6296 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   2. 200   6599 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   3. 200   5854 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   4. 200   6266 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+   5. 200   6147 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+   6. 200   6230 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   7. 200   6328 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   8. 200   7478 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   9. 200   7006 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+  10. 200   5842 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+  -> {"c1_searches_with_results": "10/10", "c1_met": true, "c2_searches_naming_store_and_reason": "10/10", "c2_met": true, "c3_under_3s": "0/10", "c3_met": false, "c4_records_complete": "10/10", "c4_met": true, "c4_record_count": 10, "c5_mean_cost_usd": 0.000423, "c5_met": true, "mean_tokens": 3326, "mean_model_calls": 5, "live_calls": 0}
+trial 3:
+   1. 200   5838 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   2. 200   6576 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   3. 200   5580 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   4. 200   6058 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+   5. 200   7137 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+   6. 200   5501 ms  results=20  notices=['Etsy took too long to answer.']  vintage graphic tee
+   7. 200   6568 ms  results=20  notices=['Etsy took too long to answer.']  denim jacket
+   8. 200   6242 ms  results=20  notices=['Etsy took too long to answer.']  flannel shirt
+   9. 200   5797 ms  results=20  notices=['Etsy took too long to answer.']  corduroy pants
+  10. 200   5973 ms  results=20  notices=['Etsy took too long to answer.']  white denim pants
+  -> {"c1_searches_with_results": "10/10", "c1_met": true, "c2_searches_naming_store_and_reason": "10/10", "c2_met": true, "c3_under_3s": "0/10", "c3_met": false, "c4_records_complete": "10/10", "c4_met": true, "c4_record_count": 10, "c5_mean_cost_usd": 0.000423, "c5_met": true, "mean_tokens": 3330, "mean_model_calls": 5, "live_calls": 0}
